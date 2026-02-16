@@ -1,0 +1,25 @@
+id: sample-workflow
+version: "1.0"
+name: Sample Deployment Workflow
+stages:
+  - id: build-stage
+    executionMode: SEQUENTIAL
+    steps:
+      - id: build-step
+        type: GITHUB_WORKFLOW
+        config:
+          repo: cvs/app-service
+          workflow: build.yml
+          branch: main
+          token: "your-github-token"
+
+  - id: test-stage
+    executionMode: SEQUENTIAL
+    steps:
+      - id: perf-test
+        type: JENKINS_JOB
+        config:
+          jenkinsUrl: http://jenkins.example.com
+          jobName: performance-test
+          username: admin
+          token: "your-jenkins-token"
