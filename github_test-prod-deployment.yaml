@@ -1,0 +1,19 @@
+id: github_test-prod-deployment
+version: "1.0"
+name: Test Production Deployment (Tests Disabled)
+stages:
+  - id: deploy-to-prod
+    executionMode: SEQUENTIAL
+    steps:
+      - id: prod-deploy-step
+        type: GITHUB_WORKFLOW
+        config:
+          repo: alaudmins/demo-calc-app
+          workflow: build-deploy.yml
+          branch: main
+          token: "YOUR_GITHUB_TOKEN_HERE"
+          inputs:
+            environment: "prod"
+            version: "3.0.0-rc1"
+            enable_tests: false
+            notes: "Production release candidate - tests skipped for faster deployment"

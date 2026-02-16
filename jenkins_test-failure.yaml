@@ -1,0 +1,33 @@
+id: jenkins_test-failure
+version: "1.0"
+name: Test Jenkins Failure Handling - Division by Zero
+stages:
+  - id: test-failure-scenario
+    executionMode: SEQUENTIAL
+    steps:
+      - id: trigger-division-by-zero
+        type: JENKINS_JOB
+        config:
+          jenkinsUrl: "http://localhost:9090"
+          jobName: "calculator-pipeline"
+          username: "pt-orch"
+          token: "1116dba6516c82d4d59aa042d0e32473c2"
+          parameters:
+            OPERATION: "DIVIDE"
+            NUM1: "100"
+            NUM2: "0"
+            VERBOSE: "true"
+
+      # This step should NOT execute if the previous step fails
+      - id: should-not-execute
+        type: JENKINS_JOB
+        config:
+          jenkinsUrl: "http://localhost:9090"
+          jobName: "calculator-pipeline"
+          username: "pt-orch"
+          token: "1116dba6516c82d4d59aa042d0e32473c2"
+          parameters:
+            OPERATION: "ADD"
+            NUM1: "1"
+            NUM2: "1"
+            VERBOSE: "false"

@@ -109,6 +109,32 @@ public class WorkflowService {
 
     public WorkflowRunEntity getRun(UUID runId) {
         return workflowRunRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("Run not found: " + runId));
+                .orElseThrow(() -> new RuntimeException("Run not found: " + runId));
+    }
+
+    public List<WorkflowRunEntity> listRuns() {
+        return workflowRunRepository.findAllByOrderByStartTimeDesc();
+    }
+
+    @Transactional
+    public void deleteWorkflow(String workflowId) {
+        WorkflowDefinitionEntity workflow = workflowDefinitionRepository.findAll().stream()
+                .filter(w -> w.getWorkflowId().equals(workflowId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Workflow not found: " + workflowId));
+
+        // First, delete all runs associated with this workflow
+        List<WorkflowRunEntity> runs = workflowRunRepository.findAll().stream()
+                .filter(run -> run.getWorkflowDefinition().getId().equals(workflow.getId()))
+                .toList();
+
+        if (!runs.isEmpty()) {
+            log.info("Deleting {} workflow runs for workflow: {}", runs.size(), workflowId);
+            workflowRunRepository.deleteAll(runs);
+        }
+
+        // Then delete the workflow definition
+        workflowDefinitionRepository.delete(workflow);
+        log.info("Deleted workflow: {}", workflowId);
     }
 }

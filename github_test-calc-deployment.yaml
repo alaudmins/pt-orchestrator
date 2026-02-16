@@ -1,0 +1,16 @@
+id: github_test-calc-deployment
+version: "1.0"
+name: Test Calculator App Deployment
+stages:
+  - id: trigger-deployment
+    executionMode: SEQUENTIAL
+    steps:
+      - id: deploy-calc-app
+        type: GITHUB_WORKFLOW
+        config:
+          repo: alaudmins/demo-calc-app
+          workflow: build-deploy.yml
+          branch: main
+          token: "YOUR_GITHUB_TOKEN_HERE"
+          inputs:
+            environment: "dev"
