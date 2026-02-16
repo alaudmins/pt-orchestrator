@@ -39,3 +39,4 @@ mvnw.cmd
 # Application specific
 *.pid
 spring.log
+demo-calc-app/
