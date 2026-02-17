@@ -1,0 +1,5 @@
+# pt-orchestrator Environment Variables
+export GITHUB_TOKEN="your_github_personal_access_token_here"
+export JENKINS_URL="http://host.docker.internal:9090"
+export JENKINS_USER="pt-orch"
+export JENKINS_TOKEN="your_jenkins_api_token_here"

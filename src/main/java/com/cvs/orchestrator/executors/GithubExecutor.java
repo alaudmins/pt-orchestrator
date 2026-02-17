@@ -1,6 +1,7 @@
 package com.cvs.orchestrator.executors;
 
 import com.cvs.orchestrator.model.runtime.Status;
+import com.cvs.orchestrator.util.EnvVarResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -31,7 +32,8 @@ public class GithubExecutor implements StepExecutor {
 
     @Override
     public StepExecutionResult execute(StepExecutionContext context) {
-        Map<String, Object> config = context.getConfig();
+        // Resolve environment variables in config
+        Map<String, Object> config = EnvVarResolver.resolveMap(context.getConfig());
         Map<String, Object> metadata = context.getMetadata() != null ? context.getMetadata() : new HashMap<>();
 
         String repo = (String) config.get("repo");

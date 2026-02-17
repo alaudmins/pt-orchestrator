@@ -1,9 +1,14 @@
 package com.cvs.orchestrator.executors;
 
 import com.cvs.orchestrator.model.runtime.Status;
+import com.cvs.orchestrator.util.EnvVarResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,7 +23,8 @@ public class JenkinsExecutor implements StepExecutor {
 
     @Override
     public StepExecutionResult execute(StepExecutionContext context) {
-        Map<String, Object> config = context.getConfig();
+        // Resolve environment variables in config
+        Map<String, Object> config = EnvVarResolver.resolveMap(context.getConfig());
         Map<String, Object> metadata = context.getMetadata() != null ? context.getMetadata() : new HashMap<>();
 
         String jenkinsUrl = (String) config.get("jenkinsUrl");
@@ -41,32 +47,102 @@ public class JenkinsExecutor implements StepExecutor {
 
     private StepExecutionResult triggerBuild(String jenkinsUrl, String jobName, String username, String token,
             Map<String, Object> config) {
-        log.info("Triggering Jenkins job: {}", jobName);
+        log.info("Triggering Jenkins job: {} at {}", jobName, jenkinsUrl);
 
-        // TODO: Implement actual Jenkins API call
-        // POST {jenkinsUrl}/job/{jobName}/buildWithParameters
-        // Extract queue URL from Location header
+        try {
+            WebClient webClient = createWebClient(jenkinsUrl, username, token);
+            Map<String, Object> parameters = (Map<String, Object>) config.get("parameters");
 
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("queueUrl", jenkinsUrl + "/queue/item/123"); // Mock
-        metadata.put("triggeredAt", System.currentTimeMillis());
+            String endpoint;
+            if (parameters != null && !parameters.isEmpty()) {
+                // Build with parameters
+                endpoint = "/job/" + jobName + "/buildWithParameters";
+            } else {
+                // Build without parameters
+                endpoint = "/job/" + jobName + "/build";
+            }
 
-        return StepExecutionResult.running(metadata);
+            // Trigger the build
+            var response = webClient.post()
+                    .uri(uriBuilder -> {
+                        var builder = uriBuilder.path(endpoint);
+                        if (parameters != null) {
+                            parameters.forEach(
+                                    (key, value) -> builder.queryParam(key, value != null ? value.toString() : ""));
+                        }
+                        return builder.build();
+                    })
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block(Duration.ofSeconds(10));
+
+            // Extract queue URL from Location header
+            String queueUrl = response.getHeaders().getLocation() != null
+                    ? response.getHeaders().getLocation().toString()
+                    : null;
+
+            if (queueUrl == null) {
+                log.warn("No queue URL returned from Jenkins, using fallback");
+                queueUrl = jenkinsUrl + "/queue/item/latest";
+            }
+
+            log.info("Jenkins job triggered successfully. Queue URL: {}", queueUrl);
+
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("queueUrl", queueUrl);
+            metadata.put("triggeredAt", System.currentTimeMillis());
+
+            return StepExecutionResult.running(metadata);
+        } catch (Exception e) {
+            log.error("Failed to trigger Jenkins job: {}", jobName, e);
+            return StepExecutionResult.failed("Failed to trigger Jenkins job: " + e.getMessage());
+        }
     }
 
     private StepExecutionResult checkQueue(String jenkinsUrl, String jobName, String username, String token,
             Map<String, Object> metadata) {
-        log.info("Checking Jenkins queue for job: {}", jobName);
+        String queueUrl = (String) metadata.get("queueUrl");
+        log.info("Checking Jenkins queue: {}", queueUrl);
 
-        // TODO: Implement actual queue check
-        // GET {queueUrl}/api/json
-        // Check for "executable": { "number": 123 }
+        try {
+            WebClient webClient = createWebClient(jenkinsUrl, username, token);
 
-        // Mock: Assume build number is ready
-        metadata.put("buildNumber", 123);
-        metadata.remove("queueUrl");
+            // Extract queue item ID from URL
+            String queueItemPath = queueUrl.replace(jenkinsUrl, "");
 
-        return StepExecutionResult.running(metadata);
+            Map<String, Object> queueItem = webClient.get()
+                    .uri(queueItemPath + "/api/json")
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block(Duration.ofSeconds(10));
+
+            // Check if build has started (has executable)
+            Map<String, Object> executable = (Map<String, Object>) queueItem.get("executable");
+
+            if (executable != null) {
+                Integer buildNumber = (Integer) executable.get("number");
+                log.info("Jenkins build started with number: {}", buildNumber);
+
+                metadata.put("buildNumber", buildNumber);
+                metadata.remove("queueUrl");
+
+                return StepExecutionResult.running(metadata);
+            } else {
+                // Check if cancelled or blocked
+                Boolean cancelled = (Boolean) queueItem.get("cancelled");
+                if (cancelled != null && cancelled) {
+                    return StepExecutionResult.failed("Jenkins build was cancelled in queue");
+                }
+
+                // Still waiting in queue
+                log.debug("Jenkins build still in queue");
+                return StepExecutionResult.running(metadata);
+            }
+        } catch (Exception e) {
+            log.error("Failed to check Jenkins queue", e);
+            // Keep retrying
+            return StepExecutionResult.running(metadata);
+        }
     }
 
     private StepExecutionResult checkBuildStatus(String jenkinsUrl, String jobName, String username, String token,
@@ -74,24 +150,47 @@ public class JenkinsExecutor implements StepExecutor {
         Integer buildNumber = (Integer) metadata.get("buildNumber");
         log.info("Checking Jenkins build status: {}/{}", jobName, buildNumber);
 
-        // TODO: Implement actual build status check
-        // GET {jenkinsUrl}/job/{jobName}/{buildNumber}/api/json
-        // Check "building": false, "result": "SUCCESS"
+        try {
+            WebClient webClient = createWebClient(jenkinsUrl, username, token);
 
-        // Mock: Return success immediately
-        Map result = new HashMap();
-        result.put("building", false);
-        result.put("result", "SUCCESS");
+            Map<String, Object> build = webClient.get()
+                    .uri("/job/" + jobName + "/" + buildNumber + "/api/json")
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block(Duration.ofSeconds(10));
 
-        if ((Boolean) result.get("building")) {
-            return StepExecutionResult.running(metadata);
+            Boolean building = (Boolean) build.get("building");
+
+            if (building != null && building) {
+                log.debug("Jenkins build {} is still running", buildNumber);
+                return StepExecutionResult.running(metadata);
+            }
+
+            String result = (String) build.get("result");
+
+            if ("SUCCESS".equals(result)) {
+                log.info("Jenkins build {} completed successfully", buildNumber);
+                return StepExecutionResult.success();
+            } else if (result == null) {
+                // Still building
+                return StepExecutionResult.running(metadata);
+            } else {
+                log.warn("Jenkins build {} failed with result: {}", buildNumber, result);
+                return StepExecutionResult.failed("Jenkins build failed: " + result);
+            }
+        } catch (Exception e) {
+            log.error("Failed to check Jenkins build status", e);
+            return StepExecutionResult.failed("Failed to check build status: " + e.getMessage());
         }
+    }
 
-        String jenkinsResult = (String) result.get("result");
-        if ("SUCCESS".equals(jenkinsResult)) {
-            return StepExecutionResult.success();
-        } else {
-            return StepExecutionResult.failed("Jenkins build failed: " + jenkinsResult);
-        }
+    private WebClient createWebClient(String jenkinsUrl, String username, String token) {
+        String auth = username + ":" + token;
+        String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+
+        return WebClient.builder()
+                .baseUrl(jenkinsUrl)
+                .defaultHeader("Authorization", "Basic " + encodedAuth)
+                .build();
     }
 }

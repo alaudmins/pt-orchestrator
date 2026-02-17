@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -39,11 +40,30 @@ public class WorkflowService {
         // But if ID/Version exists, we should update or fail.
         // Let's implement upsert logic: find existing, delete stages, re-add.
 
-        workflowDefinitionRepository.findByWorkflowIdAndVersion(def.getId(), def.getVersion())
-                .ifPresent(existing -> {
-                    workflowDefinitionRepository.delete(existing);
-                    workflowDefinitionRepository.flush();
-                });
+        // Check if workflow with same ID and version already exists
+        Optional<WorkflowDefinitionEntity> existingOpt = workflowDefinitionRepository
+                .findByWorkflowIdAndVersion(def.getId(), def.getVersion());
+
+        if (existingOpt.isPresent()) {
+            WorkflowDefinitionEntity existing = existingOpt.get();
+            boolean hasRuns = workflowRunRepository.existsByWorkflowDefinition(existing);
+
+            if (hasRuns) {
+                // Workflow has existing runs - just update YAML content and name
+                // This preserves referential integrity with existing runs
+                log.info("Updating existing workflow {}:{} (has existing runs, preserving structure)",
+                        existing.getWorkflowId(), existing.getVersion());
+                existing.setYamlContent(yamlContent);
+                existing.setName(def.getName());
+                return workflowDefinitionRepository.save(existing);
+            } else {
+                // No runs exist, safe to delete and re-create with new structure
+                log.info("Deleting existing workflow {}:{} for re-registration (no runs exist)",
+                        existing.getWorkflowId(), existing.getVersion());
+                workflowDefinitionRepository.delete(existing);
+                workflowDefinitionRepository.flush();
+            }
+        }
 
         // Map Stages and Steps
         List<StageDefinitionEntity> stageEntities = def.getStages().stream().map(s -> {

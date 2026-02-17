@@ -1,0 +1,23 @@
+version: '3.8'
+
+# pt-orchestrator application only
+# Requires external PostgreSQL database to be running
+
+services:
+  orchestrator-app:
+    build: .
+    container_name: orchestrator-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Database configuration - connects to external database
+      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:postgresql://host.docker.internal:5432/orchestrator}
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      
+      # Application credentials
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      JENKINS_URL: ${JENKINS_URL:-http://host.docker.internal:9090}
+      JENKINS_USER: ${JENKINS_USER:-pt-orch}
+      JENKINS_TOKEN: ${JENKINS_TOKEN}
+    restart: unless-stopped

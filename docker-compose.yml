@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # PostgreSQL database (optional - can be disabled if using external DB)
   orchestrator-db:
     image: postgres:15
     container_name: orchestrator-db
@@ -15,6 +16,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    profiles:
+      - with-db  # Only start this service when 'with-db' profile is active
 
   orchestrator-app:
     build: .
@@ -22,9 +25,17 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://orchestrator-db:5432/orchestrator
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
+      # Database configuration - override these to use external database
+      SPRING_DATASOURCE_URL: ${DATABASE_URL:-jdbc:postgresql://orchestrator-db:5432/orchestrator}
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      
+      # Application credentials
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      JENKINS_URL: ${JENKINS_URL:-http://localhost:9090}
+      JENKINS_USER: ${JENKINS_USER:-pt-orch}
+      JENKINS_TOKEN: ${JENKINS_TOKEN}
     depends_on:
       orchestrator-db:
         condition: service_healthy
+        required: false  # Make database dependency optional

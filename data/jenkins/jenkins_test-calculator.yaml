@@ -8,10 +8,10 @@ stages:
       - id: run-calculator-pipeline
         type: JENKINS_JOB
         config:
-          jenkinsUrl: "http://localhost:9090"
+          jenkinsUrl: "${JENKINS_URL:http://localhost:9090}"
           jobName: "calculator-pipeline"
-          username: "pt-orch"
-          token: "1116dba6516c82d4d59aa042d0e32473c2"
+          username: "${JENKINS_USER:pt-orch}"
+          token: "${JENKINS_TOKEN}"
           parameters:
             OPERATION: "MULTIPLY"
             NUM1: "15"
@@ -21,10 +21,10 @@ stages:
       - id: verify-success
         type: JENKINS_JOB
         config:
-          jenkinsUrl: "http://localhost:9090"
+          jenkinsUrl: "${JENKINS_URL:http://localhost:9090}"
           jobName: "calculator-pipeline"
-          username: "pt-orch"
-          token: "1116dba6516c82d4d59aa042d0e32473c2"
+          username: "${JENKINS_USER:pt-orch}"
+          token: "${JENKINS_TOKEN}"
           parameters:
             OPERATION: "ADD"
             NUM1: "100"

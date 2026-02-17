@@ -1,0 +1,27 @@
+version: '3.8'
+
+# Standalone PostgreSQL database for pt-orchestrator
+# Start this independently before starting the orchestrator app
+
+services:
+  orchestrator-db:
+    image: postgres:17
+    container_name: orchestrator-db
+    environment:
+      POSTGRES_DB: orchestrator
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - orchestrator-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  orchestrator-db-data:
+    name: orchestrator-db-data

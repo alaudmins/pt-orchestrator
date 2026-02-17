@@ -10,4 +10,7 @@ import java.util.UUID;
 @Repository
 public interface WorkflowRunRepository extends JpaRepository<WorkflowRunEntity, UUID> {
     List<WorkflowRunEntity> findAllByOrderByStartTimeDesc();
+
+    boolean existsByWorkflowDefinition(
+            com.cvs.orchestrator.model.definition.WorkflowDefinitionEntity workflowDefinition);
 }
