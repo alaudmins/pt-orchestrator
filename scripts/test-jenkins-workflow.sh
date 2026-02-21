@@ -3,6 +3,13 @@
 # Test script for Jenkins workflow integration
 # This script registers a Jenkins workflow and triggers its execution
 
+
+# ── Resolve project root (works from any directory) ──────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${PROJECT_ROOT}"
+# ─────────────────────────────────────────────────────────────────────────────
+
 set -e
 
 BASE_URL="http://localhost:8080"

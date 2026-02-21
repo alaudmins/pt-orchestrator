@@ -1,5 +1,12 @@
 #!/bin/bash
 
+
+# ── Resolve project root (works from any directory) ──────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${PROJECT_ROOT}"
+# ─────────────────────────────────────────────────────────────────────────────
+
 echo "===> 1. List all workflows"
 curl -s http://localhost:8080/api/workflows | jq '.[] | {id, name, version}' || echo "⚠️  No workflows yet"
 

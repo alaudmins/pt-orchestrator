@@ -6,6 +6,7 @@ pipeline {
         string(name: 'NUM1', defaultValue: '10', description: 'First number')
         string(name: 'NUM2', defaultValue: '5', description: 'Second number')
         booleanParam(name: 'VERBOSE', defaultValue: true, description: 'Enable verbose logging')
+        string(name: 'SLEEP_DURATION', defaultValue: '0', description: 'Seconds to sleep after validation (for testing sequential execution)')
     }
     
     stages {
@@ -40,6 +41,14 @@ pipeline {
                     } catch (NumberFormatException e) {
                         error "❌ Invalid input: Numbers must be integers"
                     }
+
+                    // Optional delay for testing sequential execution
+                    def sleepSec = params.SLEEP_DURATION.toInteger()
+                    if (sleepSec > 0) {
+                        echo "💤 Sleeping for ${sleepSec}s (SLEEP_DURATION param)..."
+                        sleep(time: sleepSec, unit: 'SECONDS')
+                        echo "⏰ Sleep complete — continuing"
+                    }
                 }
             }
         }
@@ -67,7 +76,8 @@ pipeline {
                             echo "Calculating: ${num1} - ${num2}"
                             break
                         case 'MULTIPLY':
-                            result = num1 * ${num2}"
+                            result = num1 * num2
+                            echo "Calculating: ${num1} * ${num2}"
                             break
                         case 'DIVIDE':
                             result = num1 / num2

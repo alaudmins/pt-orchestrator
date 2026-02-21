@@ -49,12 +49,32 @@ public class WorkflowService {
             boolean hasRuns = workflowRunRepository.existsByWorkflowDefinition(existing);
 
             if (hasRuns) {
-                // Workflow has existing runs - just update YAML content and name
-                // This preserves referential integrity with existing runs
-                log.info("Updating existing workflow {}:{} (has existing runs, preserving structure)",
+                // Workflow has existing runs - update YAML content, name, AND step configs
+                // Step entities are preserved (referential integrity with runs),
+                // but their configs are updated to reflect the new YAML.
+                log.info("Updating existing workflow {}:{} (has existing runs, updating configs in-place)",
                         existing.getWorkflowId(), existing.getVersion());
                 existing.setYamlContent(yamlContent);
                 existing.setName(def.getName());
+
+                // Build stepId -> new config map from the freshly-parsed definition
+                java.util.Map<String, java.util.Map<String, Object>> newConfigs = new java.util.HashMap<>();
+                for (com.cvs.orchestrator.model.definition.StageDefinition stage : def.getStages()) {
+                    for (com.cvs.orchestrator.model.definition.StepDefinition step : stage.getSteps()) {
+                        newConfigs.put(step.getId(), step.getConfig());
+                    }
+                }
+
+                // Apply updated configs to existing step entities
+                for (StageDefinitionEntity stageEntity : existing.getStages()) {
+                    for (StepDefinitionEntity stepEntity : stageEntity.getSteps()) {
+                        java.util.Map<String, Object> newConfig = newConfigs.get(stepEntity.getStepId());
+                        if (newConfig != null) {
+                            stepEntity.setConfig(newConfig);
+                        }
+                    }
+                }
+
                 return workflowDefinitionRepository.save(existing);
             } else {
                 // No runs exist, safe to delete and re-create with new structure
@@ -92,6 +112,7 @@ public class WorkflowService {
         return workflowDefinitionRepository.save(entity);
     }
 
+    @Transactional(readOnly = true)
     public List<WorkflowDefinitionEntity> listWorkflows() {
         return workflowDefinitionRepository.findAll();
     }
@@ -121,6 +142,12 @@ public class WorkflowService {
         run.setStatus(Status.PENDING);
         run = workflowRunRepository.save(run); // Save to generate ID
 
+        // Force-load all lazy collections while still in this @Transactional context.
+        // startWorkflow() is async and runs without a transaction — the detached entity
+        // graph must be fully initialized here so lazy proxies don't throw later.
+        run.getWorkflowDefinition().getStages().forEach(stage -> stage.getSteps().forEach(step -> step.getStepId())); // init
+                                                                                                                      // steps
+
         // Async execution
         workflowEngine.startWorkflow(run);
 
@@ -132,6 +159,7 @@ public class WorkflowService {
                 .orElseThrow(() -> new RuntimeException("Run not found: " + runId));
     }
 
+    @Transactional(readOnly = true)
     public List<WorkflowRunEntity> listRuns() {
         return workflowRunRepository.findAllByOrderByStartTimeDesc();
     }

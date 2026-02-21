@@ -8,6 +8,13 @@
 #   OR
 #   . setup-env.sh
 
+
+# ── Resolve project root (works from any directory) ──────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${PROJECT_ROOT}"
+# ─────────────────────────────────────────────────────────────────────────────
+
 echo "🔧 Setting up environment variables for pt-orchestrator..."
 
 # ============================================

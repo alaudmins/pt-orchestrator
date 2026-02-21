@@ -17,8 +17,10 @@ import java.util.Map;
 public class GithubExecutor implements StepExecutor {
 
     private final WebClient webClient;
+    private final EnvVarResolver envVarResolver;
 
-    public GithubExecutor() {
+    public GithubExecutor(EnvVarResolver envVarResolver) {
+        this.envVarResolver = envVarResolver;
         this.webClient = WebClient.builder()
                 .baseUrl("https://api.github.com")
                 .defaultHeader("Accept", "application/vnd.github.v3+json")
@@ -33,7 +35,7 @@ public class GithubExecutor implements StepExecutor {
     @Override
     public StepExecutionResult execute(StepExecutionContext context) {
         // Resolve environment variables in config
-        Map<String, Object> config = EnvVarResolver.resolveMap(context.getConfig());
+        Map<String, Object> config = envVarResolver.resolveMap(context.getConfig());
         Map<String, Object> metadata = context.getMetadata() != null ? context.getMetadata() : new HashMap<>();
 
         String repo = (String) config.get("repo");
@@ -105,10 +107,12 @@ public class GithubExecutor implements StepExecutor {
             String owner = repoParts[0];
             String repoName = repoParts[1];
 
+            // Filter by workflow file name — avoids picking up runs from other workflows
             Map<String, Object> response = webClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/repos/{owner}/{repo}/actions/runs")
-                            .queryParam("per_page", "10")
+                            .queryParam("workflow_id", workflow)
+                            .queryParam("per_page", "5")
                             .build(owner, repoName))
                     .header("Authorization", "Bearer " + token)
                     .header("X-GitHub-Api-Version", "2022-11-28")
@@ -120,21 +124,24 @@ public class GithubExecutor implements StepExecutor {
 
             for (Map<String, Object> run : runs) {
                 String createdAt = (String) run.get("created_at");
-                // Simple check: if run was created after we triggered, it's likely ours
-                // In production, you'd want more sophisticated matching
-                if (run.get("name") != null) {
-                    metadata.put("runId", ((Number) run.get("id")).longValue());
-                    metadata.remove("triggeredAt");
-                    log.info("Found GitHub workflow run ID: {}", metadata.get("runId"));
-                    return StepExecutionResult.running(metadata);
+                // Only accept runs created AFTER we triggered (within a 5-minute window)
+                if (createdAt != null) {
+                    long runCreatedMs = java.time.Instant.parse(createdAt).toEpochMilli();
+                    if (runCreatedMs >= triggeredAt - 5000) { // 5s tolerance for clock skew
+                        long runId = ((Number) run.get("id")).longValue();
+                        metadata.put("runId", runId);
+                        metadata.remove("triggeredAt");
+                        log.info("Found GitHub workflow run ID: {} for workflow: {}", runId, workflow);
+                        return StepExecutionResult.running(metadata);
+                    }
                 }
             }
 
-            // Still waiting for run to appear
+            // Run not yet visible — keep polling
+            log.debug("No matching run found yet for {} — will retry", workflow);
             return StepExecutionResult.running(metadata);
         } catch (Exception e) {
             log.error("Failed to find GitHub workflow run ID", e);
-            // Keep trying
             return StepExecutionResult.running(metadata);
         }
     }

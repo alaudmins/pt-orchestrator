@@ -4,7 +4,7 @@ import com.cvs.orchestrator.model.definition.StepDefinitionEntity;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -18,8 +18,8 @@ import java.util.UUID;
 public class StepRunEntity {
 
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
+    @GeneratedValue
+    @UuidGenerator
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -45,7 +45,7 @@ public class StepRunEntity {
     private Instant endTime;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "metadata_json", columnDefinition = "JSONB")
+    @Column(name = "metadata_json")
     private Map<String, Object> metadata;
 
     @Column(name = "logs_text", columnDefinition = "TEXT")

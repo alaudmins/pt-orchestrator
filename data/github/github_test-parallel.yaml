@@ -1,0 +1,29 @@
+id: github_test-parallel
+version: "1.0"
+name: Test GitHub Parallel Execution
+
+stages:
+  - id: parallel-github-stage
+    executionMode: PARALLEL
+    steps:
+      - id: github-parallel-job-a
+        type: GITHUB_WORKFLOW
+        config:
+          repo: "alaudmins/demo-calc-app"
+          workflow: "parallel-job-a.yml"
+          branch: "main"
+          token: "secret:github-token"
+          inputs:
+            job_label: "Parallel Job A"
+            sleep_seconds: "15"
+
+      - id: github-parallel-job-b
+        type: GITHUB_WORKFLOW
+        config:
+          repo: "alaudmins/demo-calc-app"
+          workflow: "parallel-job-b.yml"
+          branch: "main"
+          token: "secret:github-token"
+          inputs:
+            job_label: "Parallel Job B"
+            sleep_seconds: "15"

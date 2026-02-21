@@ -40,3 +40,7 @@ mvnw.cmd
 *.pid
 spring.log
 demo-calc-app/
+
+# Local environment — contains secrets, never commit
+.env
+# .env.example is safe to commit (no real values)

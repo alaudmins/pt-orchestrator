@@ -3,6 +3,13 @@
 # Script to start the PostgreSQL database independently
 # This database will persist data across restarts
 
+
+# ── Resolve project root (works from any directory) ──────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${PROJECT_ROOT}"
+# ─────────────────────────────────────────────────────────────────────────────
+
 echo "🗄️  Starting PostgreSQL database..."
 docker-compose -f docker-compose.db.yml up -d
 

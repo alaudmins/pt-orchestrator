@@ -4,7 +4,7 @@ import com.cvs.orchestrator.model.definition.WorkflowDefinitionEntity;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -20,8 +20,8 @@ import java.util.UUID;
 public class WorkflowRunEntity {
 
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
+    @GeneratedValue
+    @UuidGenerator
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -43,6 +43,6 @@ public class WorkflowRunEntity {
     private Instant endTime;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "context_json", columnDefinition = "JSONB")
+    @Column(name = "context_json")
     private Map<String, Object> context;
 }

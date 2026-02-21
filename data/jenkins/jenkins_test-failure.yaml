@@ -8,7 +8,7 @@ stages:
       - id: trigger-division-by-zero
         type: JENKINS_JOB
         config:
-          jenkinsUrl: "http://localhost:9090"
+          jenkinsUrl: "${JENKINS_URL:http://localhost:9090}"
           jobName: "calculator-pipeline"
           username: "pt-orch"
           token: "1116dba6516c82d4d59aa042d0e32473c2"
@@ -17,12 +17,13 @@ stages:
             NUM1: "100"
             NUM2: "0"
             VERBOSE: "true"
+            SLEEP_DURATION: "30"
 
       # This step should NOT execute if the previous step fails
       - id: should-not-execute
         type: JENKINS_JOB
         config:
-          jenkinsUrl: "http://localhost:9090"
+          jenkinsUrl: "${JENKINS_URL:http://localhost:9090}"
           jobName: "calculator-pipeline"
           username: "pt-orch"
           token: "1116dba6516c82d4d59aa042d0e32473c2"

@@ -1,6 +1,9 @@
 package com.cvs.orchestrator.util;
 
+import com.cvs.orchestrator.service.SecretService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -8,49 +11,73 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Utility class for resolving environment variable placeholders in
- * configuration values.
- * Supports patterns like ${ENV_VAR_NAME} and ${ENV_VAR_NAME:default_value}
+ * Resolves configuration placeholders at execution time:
+ *
+ * ${ENV_VAR} → system environment variable
+ * ${ENV_VAR:default} → env var with fallback
+ * secret:name → decrypted value from the built-in secrets store
+ *
+ * The secrets store lookup is the preferred production pattern.
+ * Users POST secrets once via POST /api/secrets and reference them in YAMLs:
+ *
+ * token: "secret:my-github-token"
+ *
+ * No container restarts or env var changes needed when rotating credentials.
  */
 @Slf4j
+@Component
+@RequiredArgsConstructor
 public class EnvVarResolver {
 
     private static final Pattern ENV_VAR_PATTERN = Pattern.compile("\\$\\{([^}:]+)(?::([^}]*))?}");
 
+    private static final String SECRET_PREFIX = "secret:";
+
+    private final SecretService secretService;
+
+    // -------------------------------------------------------------------------
+    // Public API
+    // -------------------------------------------------------------------------
+
     /**
-     * Resolves environment variable placeholders in a string value.
-     * 
-     * @param value String that may contain ${VAR_NAME} or ${VAR_NAME:default}
-     *              patterns
-     * @return Resolved string with environment variables substituted
-     * @throws IllegalArgumentException if a required env var is missing (no default
-     *                                  provided)
+     * Resolve a single string value.
+     * Handles:
+     * "secret:token-name" → secrets store lookup
+     * "${ENV_VAR}" → environment variable
+     * "${ENV_VAR:default}" → environment variable with default
+     * anything else → returned as-is
      */
-    public static String resolve(String value) {
-        if (value == null) {
+    public String resolve(String value) {
+        if (value == null)
             return null;
+
+        // Check for secret: prefix first (entire string is a secret reference)
+        if (value.startsWith(SECRET_PREFIX)) {
+            String name = value.substring(SECRET_PREFIX.length()).trim();
+            log.debug("Resolving secret reference: secret:{}", name);
+            return secretService.getSecretValue(name);
         }
 
+        // Fall back to ${ENV_VAR} / ${ENV_VAR:default} substitution
         Matcher matcher = ENV_VAR_PATTERN.matcher(value);
         StringBuffer result = new StringBuffer();
 
         while (matcher.find()) {
             String varName = matcher.group(1);
             String defaultValue = matcher.group(2);
-
             String envValue = System.getenv(varName);
 
             if (envValue != null) {
-                log.debug("Resolved env var ${{{}}}: {}", varName,
-                        envValue.substring(0, Math.min(10, envValue.length())) + "...");
+                log.debug("Resolved env var ${{{}}}", varName);
                 matcher.appendReplacement(result, Matcher.quoteReplacement(envValue));
             } else if (defaultValue != null) {
-                log.debug("Using default value for ${{{}}}: {}", varName, defaultValue);
+                log.debug("Using default for ${{{}}}", varName);
                 matcher.appendReplacement(result, Matcher.quoteReplacement(defaultValue));
             } else {
                 throw new IllegalArgumentException(
-                        "Environment variable '" + varName + "' is required but not set. " +
-                                "Please set it or provide a default value in the configuration.");
+                        "Environment variable '" + varName + "' is not set and has no default. " +
+                                "Tip: store it securely with POST /api/secrets and reference as: secret:"
+                                + varName.toLowerCase());
             }
         }
 
@@ -59,32 +86,24 @@ public class EnvVarResolver {
     }
 
     /**
-     * Resolves environment variables in all string values within a Map recursively.
-     * 
-     * @param config Configuration map that may contain string values with env var
-     *               placeholders
-     * @return New map with all environment variables resolved
+     * Recursively resolve all string values in a configuration map.
      */
     @SuppressWarnings("unchecked")
-    public static Map<String, Object> resolveMap(Map<String, Object> config) {
-        if (config == null) {
+    public Map<String, Object> resolveMap(Map<String, Object> config) {
+        if (config == null)
             return null;
-        }
 
         Map<String, Object> resolved = new HashMap<>();
-
         for (Map.Entry<String, Object> entry : config.entrySet()) {
             Object value = entry.getValue();
-
-            if (value instanceof String) {
-                resolved.put(entry.getKey(), resolve((String) value));
+            if (value instanceof String s) {
+                resolved.put(entry.getKey(), resolve(s));
             } else if (value instanceof Map) {
                 resolved.put(entry.getKey(), resolveMap((Map<String, Object>) value));
             } else {
                 resolved.put(entry.getKey(), value);
             }
         }
-
         return resolved;
     }
 }

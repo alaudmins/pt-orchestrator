@@ -3,7 +3,7 @@ package com.cvs.orchestrator.model.definition;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.UuidGenerator;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -16,8 +16,8 @@ import java.util.UUID;
 public class StepDefinitionEntity {
 
     @Id
-    @GeneratedValue(generator = "UUID")
-    @GenericGenerator(name = "UUID", strategy = "org.hibernate.id.UUIDGenerator")
+    @GeneratedValue
+    @UuidGenerator
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -35,10 +35,10 @@ public class StepDefinitionEntity {
     private String executorType; // JENKINS_JOB, GITHUB_WORKFLOW
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "config_json", columnDefinition = "JSONB", nullable = false)
+    @Column(name = "config_json", nullable = false)
     private Map<String, Object> config;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "retry_policy_json", columnDefinition = "JSONB")
+    @Column(name = "retry_policy_json")
     private RetryPolicy retryPolicy;
 }

@@ -16,6 +16,14 @@ import java.util.Map;
 @Component
 public class JenkinsExecutor implements StepExecutor {
 
+    private final WebClient webClient;
+    private final EnvVarResolver envVarResolver;
+
+    public JenkinsExecutor(EnvVarResolver envVarResolver) {
+        this.envVarResolver = envVarResolver;
+        this.webClient = WebClient.builder().build();
+    }
+
     @Override
     public String getType() {
         return "JENKINS_JOB";
@@ -24,7 +32,7 @@ public class JenkinsExecutor implements StepExecutor {
     @Override
     public StepExecutionResult execute(StepExecutionContext context) {
         // Resolve environment variables in config
-        Map<String, Object> config = EnvVarResolver.resolveMap(context.getConfig());
+        Map<String, Object> config = envVarResolver.resolveMap(context.getConfig());
         Map<String, Object> metadata = context.getMetadata() != null ? context.getMetadata() : new HashMap<>();
 
         String jenkinsUrl = (String) config.get("jenkinsUrl");

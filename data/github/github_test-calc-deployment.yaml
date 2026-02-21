@@ -11,6 +11,6 @@ stages:
           repo: alaudmins/demo-calc-app
           workflow: build-deploy.yml
           branch: main
-          token: "${GITHUB_TOKEN}"
+          token: "secret:github-token"
           inputs:
             environment: "dev"

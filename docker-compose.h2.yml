@@ -1,0 +1,52 @@
+# pt-orchestrator — standalone with built-in H2 database
+# No external database required.
+#
+# Usage:
+#   docker compose -f docker-compose.h2.yml up --build
+#
+# H2 data is persisted in the named volume 'orchestrator-h2-data'.
+# H2 console: http://localhost:8080/h2-console
+#   JDBC URL:  jdbc:h2:file:./data/orchestratordb
+#   User:      sa
+#   Password:  (leave blank)
+#
+# Swagger UI: http://localhost:8080/swagger-ui/index.html
+
+services:
+  orchestrator-app:
+    build: .
+    container_name: orchestrator-app
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist H2 database files across container restarts
+      - orchestrator-h2-data:/app/data
+    environment:
+      SPRING_PROFILES_ACTIVE: h2
+
+      # Explicitly set H2 datasource — prevents any shell env vars from
+      # overriding profile-specific properties (Spring env vars take priority
+      # over application-*.properties files)
+      SPRING_DATASOURCE_URL: "jdbc:h2:file:./data/orchestratordb;AUTO_SERVER=TRUE;MODE=PostgreSQL;NON_KEYWORDS=VALUE"
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.h2.Driver
+      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_DATASOURCE_PASSWORD: ""
+
+      # --- Secrets store (built-in AES-256-GCM encrypted secrets) ---
+      # Generate a persistent key: openssl rand -base64 32
+      # Without this, an ephemeral key is used (secrets lost on restart).
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
+
+      # --- GitHub integration (optional — prefer secrets store in prod) ---
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+
+      # --- Jenkins integration (optional — prefer secrets store in prod) ---
+      JENKINS_URL: ${JENKINS_URL:-http://host.docker.internal:9090}
+      JENKINS_USER: ${JENKINS_USER:-pt-orch}
+      JENKINS_TOKEN: ${JENKINS_TOKEN:-}
+    restart: unless-stopped
+
+volumes:
+  orchestrator-h2-data:
+    driver: local
+

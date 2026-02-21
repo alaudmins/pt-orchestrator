@@ -1,0 +1,31 @@
+id: jenkins_test-parallel
+version: "1.0"
+name: Test Jenkins Parallel Execution
+
+stages:
+  - id: parallel-stage
+    executionMode: PARALLEL
+    steps:
+      - id: parallel-job-a-step
+        type: JENKINS_JOB
+        config:
+          jenkinsUrl: "${JENKINS_URL:http://localhost:9090}"
+          jobName: "parallel-job-a"
+          username: "${JENKINS_USER:pt-orch}"
+          token: "secret:jenkins-token"
+          parameters:
+            LABEL: "Job A - Multiply"
+            SLEEP_DURATION: "15"
+            OUTPUT_MESSAGE: "15 x 7 = 105"
+
+      - id: parallel-job-b-step
+        type: JENKINS_JOB
+        config:
+          jenkinsUrl: "${JENKINS_URL:http://localhost:9090}"
+          jobName: "parallel-job-b"
+          username: "${JENKINS_USER:pt-orch}"
+          token: "secret:jenkins-token"
+          parameters:
+            LABEL: "Job B - Add"
+            SLEEP_DURATION: "15"
+            OUTPUT_MESSAGE: "100 + 50 = 150"
