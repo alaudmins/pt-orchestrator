@@ -1,0 +1,483 @@
+{
+    "info": {
+        "name": "PT Orchestrator — Full API",
+        "_postman_id": "pt-orchestrator-full-api-v1",
+        "description": "Complete API collection for the Performance Test Orchestrator.\n\n## Setup\n1. Import this collection into Postman\n2. Create an Environment with variable:  `baseUrl` = `http://localhost:8080`\n3. Start the app:  `mvn spring-boot:run`\n4. Use the **Secrets** folder first to store your tokens, then run workflows.\n\n## Flow\n1. Store secrets (github-token, jenkins-token)\n2. Register a workflow (POST /api/workflows)\n3. Trigger a run (POST /api/workflows/:workflowId/run)\n4. Poll for status (GET /api/runs/:runId)",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8080",
+            "type": "string",
+            "description": "Base URL of the pt-orchestrator app"
+        },
+        {
+            "key": "workflowId",
+            "value": "",
+            "type": "string",
+            "description": "Set automatically by the Register Workflow request"
+        },
+        {
+            "key": "runId",
+            "value": "",
+            "type": "string",
+            "description": "Set automatically by the Trigger Run request"
+        }
+    ],
+    "item": [
+        {
+            "name": "🔐 Secrets",
+            "description": "Encrypted secrets store. Values are write-only — they are never returned by the API. Reference in workflow YAMLs as  `secret:<name>`.",
+            "item": [
+                {
+                    "name": "Store / Update Secret",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/secrets",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "secrets"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"github-token\",\n  \"value\": \"ghp_your_token_here\",\n  \"description\": \"GitHub Personal Access Token\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Create or update a named secret. The value is AES-256-GCM encrypted on write and never retrievable.\n\nAfter storing, reference in workflow YAML as:  `token: \"secret:github-token\"`"
+                    },
+                    "response": [
+                        {
+                            "name": "Store github-token",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"name\": \"github-token\",\n  \"message\": \"Secret stored successfully\",\n  \"hint\": \"Reference in YAML with: secret:github-token\"\n}"
+                        }
+                    ],
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Secret stored', () => pm.response.to.have.status(200));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Store Jenkins Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/secrets",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "secrets"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"jenkins-token\",\n  \"value\": \"your_jenkins_api_token_here\",\n  \"description\": \"Jenkins API Token for pt-orch user\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Store the Jenkins API token. Reference in workflow YAML as:  `token: \"secret:jenkins-token\"`"
+                    }
+                },
+                {
+                    "name": "List Secrets (names only)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/secrets",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "secrets"
+                            ]
+                        },
+                        "description": "List all stored secret names and metadata. Secret values are NEVER returned."
+                    },
+                    "response": [
+                        {
+                            "name": "List secrets",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "[\n  {\n    \"name\": \"github-token\",\n    \"description\": \"GitHub Personal Access Token\",\n    \"createdAt\": \"2026-02-22T08:00:00\"\n  },\n  {\n    \"name\": \"jenkins-token\",\n    \"description\": \"Jenkins API Token for pt-orch user\",\n    \"createdAt\": \"2026-02-22T08:01:00\"\n  }\n]"
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete Secret",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/secrets/github-token",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "secrets",
+                                "github-token"
+                            ]
+                        },
+                        "description": "Delete a secret by name. Replace `github-token` in the URL with the secret name to delete."
+                    },
+                    "response": [
+                        {
+                            "name": "Delete secret",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"message\": \"Secret 'github-token' deleted\"\n}"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "📋 Workflows",
+            "description": "Register, list, and delete workflow definitions. Workflows are defined in YAML and stored in the database.",
+            "item": [
+                {
+                    "name": "Register Workflow (GitHub)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "text/yaml"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "id: github_test-calc-deployment\nversion: \"1.0\"\nname: Test Calculator App Deployment\nstages:\n  - id: trigger-deployment\n    executionMode: SEQUENTIAL\n    steps:\n      - id: deploy-calc-app\n        type: GITHUB_WORKFLOW\n        config:\n          repo: your-org/your-repo\n          workflow: build-deploy.yml\n          branch: main\n          token: \"secret:github-token\"\n          inputs:\n            environment: \"dev\"",
+                            "options": {
+                                "raw": {
+                                    "language": "yaml"
+                                }
+                            }
+                        },
+                        "description": "Register a GitHub Actions workflow definition. Body is YAML text.\n\nThe `id` field must be unique. Use prefix `github_` for GitHub workflows by convention."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('workflowId', body.id);",
+                                    "  console.log('workflowId set to:', body.id);",
+                                    "}",
+                                    "pm.test('Workflow registered', () => pm.response.to.have.status(200));"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": [
+                        {
+                            "name": "Workflow registered",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"id\": \"github_test-calc-deployment\",\n  \"version\": \"1.0\",\n  \"name\": \"Test Calculator App Deployment\",\n  \"yamlContent\": \"...\"\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Register Workflow (Jenkins Sequential)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "text/yaml"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "id: jenkins_test-calculator\nversion: \"1.0\"\nname: Test Jenkins Calculator Pipeline\nstages:\n  - id: trigger-jenkins-job\n    executionMode: SEQUENTIAL\n    steps:\n      - id: run-calculator-pipeline\n        type: JENKINS_JOB\n        config:\n          jenkinsUrl: \"${JENKINS_URL:http://localhost:9090}\"\n          jobName: \"calculator-pipeline\"\n          username: \"${JENKINS_USER:pt-orch}\"\n          token: \"secret:jenkins-token\"\n          parameters:\n            OPERATION: \"MULTIPLY\"\n            NUM1: \"15\"\n            NUM2: \"7\"\n            VERBOSE: \"true\"",
+                            "options": {
+                                "raw": {
+                                    "language": "yaml"
+                                }
+                            }
+                        },
+                        "description": "Register a Jenkins sequential workflow. `jenkinsUrl` and `username` are resolved from environment variables at runtime."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('workflowId', body.id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Register Workflow (Parallel)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "text/yaml"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "id: jenkins_test-parallel\nversion: \"1.0\"\nname: Parallel Jenkins Jobs\nstages:\n  - id: parallel-jobs\n    executionMode: PARALLEL\n    steps:\n      - id: job-a\n        type: JENKINS_JOB\n        config:\n          jenkinsUrl: \"${JENKINS_URL:http://localhost:9090}\"\n          jobName: \"calculator-pipeline\"\n          username: \"${JENKINS_USER:pt-orch}\"\n          token: \"secret:jenkins-token\"\n          parameters:\n            OPERATION: \"ADD\"\n            NUM1: \"10\"\n            NUM2: \"20\"\n      - id: job-b\n        type: JENKINS_JOB\n        config:\n          jenkinsUrl: \"${JENKINS_URL:http://localhost:9090}\"\n          jobName: \"calculator-pipeline\"\n          username: \"${JENKINS_USER:pt-orch}\"\n          token: \"secret:jenkins-token\"\n          parameters:\n            OPERATION: \"MULTIPLY\"\n            NUM1: \"5\"\n            NUM2: \"6\"",
+                            "options": {
+                                "raw": {
+                                    "language": "yaml"
+                                }
+                            }
+                        },
+                        "description": "Register a parallel workflow — both steps run simultaneously within the stage."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('workflowId', body.id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "List All Workflows",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows"
+                            ]
+                        },
+                        "description": "List all registered workflow definitions."
+                    },
+                    "response": [
+                        {
+                            "name": "List workflows",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "[\n  {\n    \"id\": \"github_test-calc-deployment\",\n    \"version\": \"1.0\",\n    \"name\": \"Test Calculator App Deployment\"\n  },\n  {\n    \"id\": \"jenkins_test-calculator\",\n    \"version\": \"1.0\",\n    \"name\": \"Test Jenkins Calculator Pipeline\"\n  }\n]"
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete Workflow",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows/{{workflowId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows",
+                                "{{workflowId}}"
+                            ]
+                        },
+                        "description": "Delete a workflow definition by ID. Replace `{{workflowId}}` or enter the ID directly in the URL."
+                    },
+                    "response": [
+                        {
+                            "name": "Workflow deleted",
+                            "status": "No Content",
+                            "code": 204,
+                            "body": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "▶️ Runs",
+            "description": "Trigger workflow executions and monitor their status.",
+            "item": [
+                {
+                    "name": "Trigger Workflow Run",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows/{{workflowId}}/run",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows",
+                                "{{workflowId}}",
+                                "run"
+                            ]
+                        },
+                        "description": "Trigger an execution of a registered workflow. Returns a `runId` to track progress.\n\nMake sure to store secrets and register the workflow first."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('runId', body.runId);",
+                                    "  console.log('runId set to:', body.runId);",
+                                    "}",
+                                    "pm.test('Run triggered', () => pm.response.to.have.status(200));"
+                                ]
+                            }
+                        }
+                    ],
+                    "response": [
+                        {
+                            "name": "Run triggered",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"workflowId\": \"jenkins_test-calculator\",\n  \"status\": \"RUNNING\",\n  \"startTime\": \"2026-02-22T08:30:00\",\n  \"endTime\": null\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Run Status",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/runs/{{runId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "runs",
+                                "{{runId}}"
+                            ]
+                        },
+                        "description": "Get the detailed status of a specific workflow run. Poll this until `status` is `COMPLETED` or `FAILED`.\n\nPossible statuses:  `PENDING` → `RUNNING` → `COMPLETED` / `FAILED`"
+                    },
+                    "response": [
+                        {
+                            "name": "Run completed",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"workflowId\": \"jenkins_test-calculator\",\n  \"workflowName\": \"Test Jenkins Calculator Pipeline\",\n  \"status\": \"COMPLETED\",\n  \"startTime\": \"2026-02-22T08:30:00\",\n  \"endTime\": \"2026-02-22T08:32:15\",\n  \"stages\": []\n}"
+                        },
+                        {
+                            "name": "Run failed",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "{\n  \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"workflowId\": \"jenkins_test-calculator\",\n  \"workflowName\": \"Test Jenkins Calculator Pipeline\",\n  \"status\": \"FAILED\",\n  \"startTime\": \"2026-02-22T08:30:00\",\n  \"endTime\": \"2026-02-22T08:31:00\",\n  \"stages\": []\n}"
+                        }
+                    ]
+                },
+                {
+                    "name": "List All Runs",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/runs",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "runs"
+                            ]
+                        },
+                        "description": "List all workflow runs across all workflows."
+                    },
+                    "response": [
+                        {
+                            "name": "All runs",
+                            "status": "OK",
+                            "code": 200,
+                            "body": "[\n  {\n    \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"workflowId\": \"jenkins_test-calculator\",\n    \"status\": \"COMPLETED\",\n    \"startTime\": \"2026-02-22T08:30:00\",\n    \"endTime\": \"2026-02-22T08:32:15\"\n  }\n]"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
