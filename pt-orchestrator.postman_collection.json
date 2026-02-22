@@ -209,7 +209,7 @@
                                 "exec": [
                                     "if (pm.response.code === 200) {",
                                     "  const body = pm.response.json();",
-                                    "  pm.collectionVariables.set('workflowId', body.id);",
+                                    "  pm.collectionVariables.set('workflowId', body.workflowId);",
                                     "  console.log('workflowId set to:', body.id);",
                                     "}",
                                     "pm.test('Workflow registered', () => pm.response.to.have.status(200));"
@@ -264,7 +264,7 @@
                                 "exec": [
                                     "if (pm.response.code === 200) {",
                                     "  const body = pm.response.json();",
-                                    "  pm.collectionVariables.set('workflowId', body.id);",
+                                    "  pm.collectionVariables.set('workflowId', body.workflowId);",
                                     "}"
                                 ]
                             }
@@ -309,7 +309,7 @@
                                 "exec": [
                                     "if (pm.response.code === 200) {",
                                     "  const body = pm.response.json();",
-                                    "  pm.collectionVariables.set('workflowId', body.id);",
+                                    "  pm.collectionVariables.set('workflowId', body.workflowId);",
                                     "}"
                                 ]
                             }

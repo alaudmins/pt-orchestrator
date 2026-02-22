@@ -21,9 +21,13 @@ public class WorkflowController {
     private final WorkflowService workflowService;
 
     @PostMapping("/workflows")
-    public ResponseEntity<WorkflowDefinitionEntity> registerWorkflow(@RequestBody String yamlContent) {
+    public ResponseEntity<java.util.Map<String, Object>> registerWorkflow(@RequestBody String yamlContent) {
         WorkflowDefinitionEntity workflow = workflowService.registerWorkflow(yamlContent);
-        return ResponseEntity.ok(workflow);
+        return ResponseEntity.ok(java.util.Map.of(
+                "workflowId", workflow.getWorkflowId(), // ← use this for /run and /delete
+                "name", workflow.getName(),
+                "version", workflow.getVersion(),
+                "message", "Workflow registered successfully. Use 'workflowId' to trigger a run."));
     }
 
     @GetMapping("/workflows")
