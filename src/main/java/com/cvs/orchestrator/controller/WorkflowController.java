@@ -80,9 +80,37 @@ public class WorkflowController {
         dto.setStartTime(run.getStartTime());
         dto.setEndTime(run.getEndTime());
 
-        // Note: stages and detailed execution info will be added in future phase
-        dto.setStages(List.of());
+        // Map live stage + step runs from DB — reflects real-time execution state
+        List<WorkflowRunDetailDTO.StageRunDTO> stageDTOs = run.getStageRuns().stream()
+                .map(stageRun -> {
+                    WorkflowRunDetailDTO.StageRunDTO stageDTO = new WorkflowRunDetailDTO.StageRunDTO();
+                    stageDTO.setStageId(stageRun.getId());
+                    stageDTO.setStageDefId(stageRun.getStageDefinition().getStageId());
+                    stageDTO.setStatus(stageRun.getStatus().name());
+                    stageDTO.setStartTime(stageRun.getStartTime());
+                    stageDTO.setEndTime(stageRun.getEndTime());
 
+                    List<WorkflowRunDetailDTO.StepRunDTO> stepDTOs = stageRun.getStepRuns().stream()
+                            .map(stepRun -> {
+                                WorkflowRunDetailDTO.StepRunDTO stepDTO = new WorkflowRunDetailDTO.StepRunDTO();
+                                stepDTO.setStepId(stepRun.getId());
+                                stepDTO.setStepDefId(stepRun.getStepDefinition().getStepId());
+                                stepDTO.setExecutorType(stepRun.getStepDefinition().getExecutorType());
+                                stepDTO.setStatus(stepRun.getStatus().name());
+                                stepDTO.setStartTime(stepRun.getStartTime());
+                                stepDTO.setEndTime(stepRun.getEndTime());
+                                stepDTO.setAttemptCount(stepRun.getAttemptCount());
+                                stepDTO.setLogs(stepRun.getLogs());
+                                return stepDTO;
+                            })
+                            .collect(Collectors.toList());
+
+                    stageDTO.setSteps(stepDTOs);
+                    return stageDTO;
+                })
+                .collect(Collectors.toList());
+
+        dto.setStages(stageDTOs);
         return ResponseEntity.ok(dto);
     }
 

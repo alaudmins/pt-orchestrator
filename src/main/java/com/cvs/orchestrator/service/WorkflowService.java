@@ -154,9 +154,14 @@ public class WorkflowService {
         return run;
     }
 
+    @Transactional(readOnly = true)
     public WorkflowRunEntity getRun(UUID runId) {
-        return workflowRunRepository.findById(runId)
+        WorkflowRunEntity run = workflowRunRepository.findById(runId)
                 .orElseThrow(() -> new RuntimeException("Run not found: " + runId));
+        // Eagerly initialize lazy collections while the session is open,
+        // so the controller can map stages/steps without a session.
+        run.getStageRuns().forEach(stage -> stage.getStepRuns().forEach(step -> step.getStatus()));
+        return run;
     }
 
     @Transactional(readOnly = true)

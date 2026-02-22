@@ -58,7 +58,7 @@ public class WorkflowEngine {
     // Entry point (no @Transactional — each repo.save() commits on its own)
     // -------------------------------------------------------------------------
 
-    @Async
+    @Async("workflowExecutor")
     public void startWorkflow(WorkflowRunEntity run) {
         log.info("Starting workflow run: {}", run.getId());
 
