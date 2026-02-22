@@ -14,6 +14,8 @@ A Spring Boot workflow orchestration engine for automating Jenkins and GitHub Ac
 
 ## Quick Start
 
+### With Docker (Mac / Linux)
+
 ```bash
 # 1. Copy and fill in your env file
 cp .env.example .env   # edit .env with your keys
@@ -29,6 +31,21 @@ curl -X POST http://localhost:8080/api/secrets \
 # 4. Run a workflow
 source .env && bash scripts/test-e2e-secrets-flow.sh
 ```
+
+### Without Docker (any OS — requires Java 17+ only)
+
+```bash
+# 1. Copy and fill in your env file
+cp .env.example .env   # set JENKINS_URL, GITHUB_TOKEN, JENKINS_TOKEN, etc.
+
+# 2. Build and run (uses embedded H2 database — no external DB needed)
+export $(cat .env | grep -v '^#' | xargs)   # Mac/Linux: load env vars
+./mvnw spring-boot:run                       # uses Maven Wrapper — no mvn install needed
+
+# 3. Visit http://localhost:8080/swagger-ui.html
+```
+
+> 📖 See [docs/RUNNING_WITHOUT_DOCKER.md](docs/RUNNING_WITHOUT_DOCKER.md) for full instructions including Windows.
 
 ## API Reference
 
@@ -104,7 +121,8 @@ All scripts are in the `scripts/` directory and work from any directory:
 | [docs/ENV_SETUP_GUIDE.md](docs/ENV_SETUP_GUIDE.md) | Environment variables reference |
 | [docs/H2_POSTGRES_CONFIG.md](docs/H2_POSTGRES_CONFIG.md) | Database configuration (H2 / PostgreSQL) |
 | [docs/EXTERNAL_DATABASE.md](docs/EXTERNAL_DATABASE.md) | Connecting to an external database |
-| [docs/INDEPENDENT_SETUP.md](docs/INDEPENDENT_SETUP.md) | Running without Docker |
+| [docs/RUNNING_WITHOUT_DOCKER.md](docs/RUNNING_WITHOUT_DOCKER.md) | Running without Docker (Java/Maven, any OS) |
+| [docs/INDEPENDENT_SETUP.md](docs/INDEPENDENT_SETUP.md) | Independent setup reference |
 | [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) | Testing workflows end-to-end |
 
 ## Architecture

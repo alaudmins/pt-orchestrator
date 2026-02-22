@@ -32,9 +32,8 @@ Thumbs.db
 .dockerignore
 
 # Maven
-.mvn/
-mvnw
-mvnw.cmd
+# mvnw, mvnw.cmd, and .mvn/ are intentionally committed so the project
+# can be built without a system-wide Maven installation.
 
 # Application specific
 *.pid
