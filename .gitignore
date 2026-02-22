@@ -43,3 +43,8 @@ demo-calc-app/
 # Local environment — contains secrets, never commit
 .env
 # .env.example is safe to commit (no real values)
+
+# H2 file-based database (local persistence only)
+data/*.mv.db
+data/*.lock.db
+data/*.trace.db
