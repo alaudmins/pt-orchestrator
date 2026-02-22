@@ -61,13 +61,14 @@ public class JenkinsExecutor implements StepExecutor {
             WebClient webClient = createWebClient(jenkinsUrl, username, token);
             Map<String, Object> parameters = (Map<String, Object>) config.get("parameters");
 
+            // Convert slash-separated folder path to Jenkins URL path.
+            // e.g. "TeamA/Perf/load-test" → "/job/TeamA/job/Perf/job/load-test"
+            String jobPath = toJobPath(jobName);
             String endpoint;
             if (parameters != null && !parameters.isEmpty()) {
-                // Build with parameters
-                endpoint = "/job/" + jobName + "/buildWithParameters";
+                endpoint = jobPath + "/buildWithParameters";
             } else {
-                // Build without parameters
-                endpoint = "/job/" + jobName + "/build";
+                endpoint = jobPath + "/build";
             }
 
             // Trigger the build
@@ -162,7 +163,7 @@ public class JenkinsExecutor implements StepExecutor {
             WebClient webClient = createWebClient(jenkinsUrl, username, token);
 
             Map<String, Object> build = webClient.get()
-                    .uri("/job/" + jobName + "/" + buildNumber + "/api/json")
+                    .uri(toJobPath(jobName) + "/" + buildNumber + "/api/json")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block(Duration.ofSeconds(10));
@@ -200,5 +201,25 @@ public class JenkinsExecutor implements StepExecutor {
                 .baseUrl(jenkinsUrl)
                 .defaultHeader("Authorization", "Basic " + encodedAuth)
                 .build();
+    }
+
+    /**
+     * Converts a slash-separated Jenkins job path into the URL segment form.
+     *
+     * Examples:
+     * "my-job" → "/job/my-job"
+     * "TeamA/load-test" → "/job/TeamA/job/load-test"
+     * "TeamA/Perf/load-test" → "/job/TeamA/job/Perf/job/load-test"
+     *
+     * This supports Jenkins Folders Plugin (CloudBees / Jenkins LTS) where each
+     * folder and job segment is separated by /job/ in the REST API path.
+     */
+    private String toJobPath(String jobName) {
+        if (jobName == null || jobName.isBlank()) {
+            throw new IllegalArgumentException("Jenkins jobName must not be blank");
+        }
+        // Split on '/' and join with '/job/' separator, then prepend '/job/'
+        String[] parts = jobName.trim().split("/");
+        return "/job/" + String.join("/job/", parts);
     }
 }
