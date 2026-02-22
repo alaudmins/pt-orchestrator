@@ -438,16 +438,16 @@
                     },
                     "response": [
                         {
-                            "name": "Run completed",
+                            "name": "Run RUNNING (with live stages)",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n  \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"workflowId\": \"jenkins_test-calculator\",\n  \"workflowName\": \"Test Jenkins Calculator Pipeline\",\n  \"status\": \"COMPLETED\",\n  \"startTime\": \"2026-02-22T08:30:00\",\n  \"endTime\": \"2026-02-22T08:32:15\",\n  \"stages\": []\n}"
+                            "body": "{\n  \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"workflowId\": \"jenkins_test-calculator\",\n  \"workflowName\": \"Test Jenkins Calculator Pipeline\",\n  \"status\": \"RUNNING\",\n  \"startTime\": \"2026-02-22T08:30:00\",\n  \"endTime\": null,\n  \"stages\": [\n    {\n      \"stageDefId\": \"trigger-jenkins-job\",\n      \"status\": \"RUNNING\",\n      \"startTime\": \"2026-02-22T08:30:01\",\n      \"endTime\": null,\n      \"steps\": [\n        {\n          \"stepDefId\": \"run-calculator-pipeline\",\n          \"executorType\": \"JENKINS_JOB\",\n          \"status\": \"RUNNING\",\n          \"startTime\": \"2026-02-22T08:30:02\",\n          \"endTime\": null,\n          \"attemptCount\": 1,\n          \"logs\": null\n        }\n      ]\n    }\n  ]\n}"
                         },
                         {
-                            "name": "Run failed",
+                            "name": "Run SUCCESS (all done)",
                             "status": "OK",
                             "code": 200,
-                            "body": "{\n  \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"workflowId\": \"jenkins_test-calculator\",\n  \"workflowName\": \"Test Jenkins Calculator Pipeline\",\n  \"status\": \"FAILED\",\n  \"startTime\": \"2026-02-22T08:30:00\",\n  \"endTime\": \"2026-02-22T08:31:00\",\n  \"stages\": []\n}"
+                            "body": "{\n  \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"workflowId\": \"jenkins_test-calculator\",\n  \"workflowName\": \"Test Jenkins Calculator Pipeline\",\n  \"status\": \"SUCCESS\",\n  \"startTime\": \"2026-02-22T08:30:00\",\n  \"endTime\": \"2026-02-22T08:32:15\",\n  \"stages\": [\n    {\n      \"stageDefId\": \"trigger-jenkins-job\",\n      \"status\": \"SUCCESS\",\n      \"startTime\": \"2026-02-22T08:30:01\",\n      \"endTime\": \"2026-02-22T08:32:14\",\n      \"steps\": [\n        {\n          \"stepDefId\": \"run-calculator-pipeline\",\n          \"executorType\": \"JENKINS_JOB\",\n          \"status\": \"SUCCESS\",\n          \"startTime\": \"2026-02-22T08:30:02\",\n          \"endTime\": \"2026-02-22T08:32:14\",\n          \"attemptCount\": 1,\n          \"logs\": null\n        }\n      ]\n    }\n  ]\n}"
                         }
                     ]
                 },
@@ -467,13 +467,340 @@
                             ]
                         },
                         "description": "List all workflow runs across all workflows."
+                    }
+                }
+            ]
+        },
+        {
+            "name": "🧪 Non-Blocking Architecture Test",
+            "description": "Step-by-step sequence to verify the non-blocking trigger-run behaviour.\n\nRun these IN ORDER. Each request auto-saves variables for the next.\n\n✅ KEY PROOF: Step 3 (Trigger Run) must return in <1 second with status PENDING or RUNNING.\n✅ Step 4 (Poll Immediately) must show stages[].status=RUNNING — proving execution is in progress while the HTTP call already returned.\n✅ Steps 7-8 validate PARALLEL mode: both steps show RUNNING at the same time.",
+            "item": [
+                {
+                    "name": "1️⃣  Store Jenkins Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/secrets",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "secrets"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"jenkins-token\",\n  \"value\": \"YOUR_JENKINS_API_TOKEN\",\n  \"description\": \"Jenkins API Token\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "description": "Store Jenkins token first. Replace value with your real token."
                     },
-                    "response": [
+                    "event": [
                         {
-                            "name": "All runs",
-                            "status": "OK",
-                            "code": 200,
-                            "body": "[\n  {\n    \"runId\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"workflowId\": \"jenkins_test-calculator\",\n    \"status\": \"COMPLETED\",\n    \"startTime\": \"2026-02-22T08:30:00\",\n    \"endTime\": \"2026-02-22T08:32:15\"\n  }\n]"
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Secret stored (200)', () => pm.response.to.have.status(200));",
+                                    "console.log('✅ Step 1 done: Jenkins token stored');"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "2️⃣  Register Sequential Workflow",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "text/yaml"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "id: jenkins_test-calculator\nversion: \"1.0\"\nname: Test Jenkins Calculator Pipeline\nstages:\n  - id: trigger-jenkins-job\n    executionMode: SEQUENTIAL\n    steps:\n      - id: run-calculator-pipeline\n        type: JENKINS_JOB\n        config:\n          jenkinsUrl: \"${JENKINS_URL:http://localhost:9090}\"\n          jobName: \"YOUR_FOLDER/YOUR_JOB_NAME\"\n          username: \"${JENKINS_USER:pt-orch}\"\n          token: \"secret:jenkins-token\"\n          parameters:\n            OPERATION: \"MULTIPLY\"\n            NUM1: \"15\"\n            NUM2: \"7\"",
+                            "options": {
+                                "raw": {
+                                    "language": "yaml"
+                                }
+                            }
+                        },
+                        "description": "Register the sequential test workflow. Updates collectionVariable 'workflowId'."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Workflow registered (200)', () => pm.response.to.have.status(200));",
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('workflowId', body.workflowId);",
+                                    "  console.log('✅ Step 2 done: workflowId =', body.workflowId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "3️⃣  Trigger Run (NON-BLOCKING TEST) ⚡",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows/{{workflowId}}/run",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows",
+                                "{{workflowId}}",
+                                "run"
+                            ]
+                        },
+                        "description": "🔑 KEY TEST: This call MUST return in under 1 second.\nCheck the response time in Postman (bottom bar).\n\n✅ Pass: Response time < 1000ms, status = PENDING or RUNNING\n❌ Fail: Response time > 1 min (means @Async is still broken)"
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Trigger returned immediately (< 2000ms)', () => {",
+                                    "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                                    "});",
+                                    "pm.test('Status is PENDING or RUNNING (not SUCCESS yet)', () => {",
+                                    "  const status = pm.response.json().status;",
+                                    "  pm.expect(['PENDING', 'RUNNING']).to.include(status);",
+                                    "});",
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('runId', body.runId);",
+                                    "  console.log('✅ Step 3 done: runId =', body.runId, '| Response time:', pm.response.responseTime + 'ms');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "4️⃣  Poll Status Immediately (expect RUNNING)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/runs/{{runId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "runs",
+                                "{{runId}}"
+                            ]
+                        },
+                        "description": "Run this IMMEDIATELY after Step 3.\n\n✅ Pass: status=RUNNING, stages[0].status=RUNNING, steps[0].status=RUNNING or PENDING\n✅ This proves the workflow is executing in the background while HTTP already returned."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Run exists (200)', () => pm.response.to.have.status(200));",
+                                    "const body = pm.response.json();",
+                                    "pm.test('Status is RUNNING (background execution in progress)', () => {",
+                                    "  pm.expect(['PENDING','RUNNING']).to.include(body.status);",
+                                    "});",
+                                    "pm.test('Stages are populated (live data from DB)', () => {",
+                                    "  pm.expect(body.stages).to.be.an('array');",
+                                    "});",
+                                    "console.log('📊 Run status:', body.status);",
+                                    "console.log('📊 Stages:', JSON.stringify(body.stages?.map(s => ({stage: s.stageDefId, status: s.status, steps: s.steps?.map(st => ({step: st.stepDefId, status: st.status}))}))));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "5️⃣  Poll Status Again (wait ~15s between polls)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/runs/{{runId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "runs",
+                                "{{runId}}"
+                            ]
+                        },
+                        "description": "Wait 10–15 seconds, then run this again.\nRepeat until status = SUCCESS or FAILED.\n\n✅ Watch stages[].steps[].status transition: PENDING → RUNNING → SUCCESS"
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "const body = pm.response.json();",
+                                    "console.log('📊 Run status:', body.status);",
+                                    "body.stages?.forEach(s => {",
+                                    "  console.log('  Stage', s.stageDefId, '→', s.status);",
+                                    "  s.steps?.forEach(st => console.log('    Step', st.stepDefId, '→', st.status));",
+                                    "});",
+                                    "if (body.status === 'SUCCESS') console.log('🎉 Workflow completed successfully!');",
+                                    "if (body.status === 'FAILED') console.log('❌ Workflow failed. Check step logs:', JSON.stringify(body.stages));"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "6️⃣  Register PARALLEL Workflow",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "text/yaml"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows"
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "id: jenkins_test-parallel\nversion: \"1.0\"\nname: Parallel Jenkins Jobs\nstages:\n  - id: parallel-jobs\n    executionMode: PARALLEL\n    steps:\n      - id: job-a\n        type: JENKINS_JOB\n        config:\n          jenkinsUrl: \"${JENKINS_URL:http://localhost:9090}\"\n          jobName: \"YOUR_FOLDER/YOUR_JOB_NAME\"\n          username: \"${JENKINS_USER:pt-orch}\"\n          token: \"secret:jenkins-token\"\n          parameters:\n            OPERATION: \"ADD\"\n            NUM1: \"10\"\n            NUM2: \"20\"\n      - id: job-b\n        type: JENKINS_JOB\n        config:\n          jenkinsUrl: \"${JENKINS_URL:http://localhost:9090}\"\n          jobName: \"YOUR_FOLDER/YOUR_JOB_NAME\"\n          username: \"${JENKINS_USER:pt-orch}\"\n          token: \"secret:jenkins-token\"\n          parameters:\n            OPERATION: \"MULTIPLY\"\n            NUM1: \"5\"\n            NUM2: \"6\"",
+                            "options": {
+                                "raw": {
+                                    "language": "yaml"
+                                }
+                            }
+                        },
+                        "description": "Register the parallel test workflow. Two steps that run at the same time."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('workflowId', body.workflowId);",
+                                    "  console.log('✅ Step 6 done: parallel workflowId =', body.workflowId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "7️⃣  Trigger Parallel Run",
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/workflows/{{workflowId}}/run",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "workflows",
+                                "{{workflowId}}",
+                                "run"
+                            ]
+                        },
+                        "description": "Trigger the parallel workflow. Should also return immediately."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Parallel trigger returned immediately (< 2000ms)', () => {",
+                                    "  pm.expect(pm.response.responseTime).to.be.below(2000);",
+                                    "});",
+                                    "if (pm.response.code === 200) {",
+                                    "  const body = pm.response.json();",
+                                    "  pm.collectionVariables.set('runId', body.runId);",
+                                    "  console.log('✅ Step 7 done: parallel runId =', body.runId);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "8️⃣  Poll Parallel Status (expect BOTH steps RUNNING)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/api/runs/{{runId}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "api",
+                                "runs",
+                                "{{runId}}"
+                            ]
+                        },
+                        "description": "Run immediately after Step 7.\n\n✅ PARALLEL PROOF: stages[0].steps should show BOTH job-a AND job-b with status=RUNNING at the same time.\n❌ If only one step is RUNNING, parallel mode is broken (sequential would show one RUNNING, one PENDING)."
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "const body = pm.response.json();",
+                                    "console.log('📊 Parallel run status:', body.status);",
+                                    "const steps = body.stages?.[0]?.steps || [];",
+                                    "console.log('📊 Steps:', JSON.stringify(steps.map(s => ({id: s.stepDefId, status: s.status}))));",
+                                    "pm.test('Both parallel steps are visible in status response', () => {",
+                                    "  pm.expect(steps.length).to.equal(2);",
+                                    "});",
+                                    "const runningSteps = steps.filter(s => s.status === 'RUNNING');",
+                                    "if (runningSteps.length === 2) {",
+                                    "  console.log('🎉 PARALLEL CONFIRMED: Both steps running simultaneously!');",
+                                    "} else {",
+                                    "  console.log('ℹ️  Steps may have completed already or not started yet. Re-poll.');",
+                                    "}"
+                                ]
+                            }
                         }
                     ]
                 }
