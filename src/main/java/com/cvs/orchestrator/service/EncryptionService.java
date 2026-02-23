@@ -33,27 +33,63 @@ public class EncryptionService {
     private final SecretKey secretKey;
 
     public EncryptionService(
-            @Value("${orchestrator.secrets.encryption-key:}") String base64Key) {
+            @Value("${orchestrator.secrets.encryption-key:}") String base64KeyFromProperty) {
 
-        if (base64Key == null || base64Key.isBlank()) {
-            // Auto-generate an ephemeral key if none is configured.
-            // Secrets encrypted with it survive only for the container lifetime.
-            // Warn loudly so operators know to set a persistent key.
+        // ---------------------------------------------------------------
+        // Key resolution chain (first non-blank value wins):
+        // 1. application.properties bridge → orchestrator.secrets.encryption-key
+        // (populated by spring-dotenv from .env, or Spring's own env binding)
+        // 2. System.getenv("SECRETS_ENCRYPTION_KEY") directly
+        // (works even if spring-dotenv couldn't find .env, e.g. wrong working dir on
+        // Windows)
+        // 3. Ephemeral random key — WARN loudly (secrets lost on restart)
+        // ---------------------------------------------------------------
+
+        String resolved = (base64KeyFromProperty != null) ? base64KeyFromProperty.trim() : "";
+
+        if (resolved.isBlank()) {
+            // Level 2: direct env var lookup (bypasses spring-dotenv)
+            String directEnv = System.getenv("SECRETS_ENCRYPTION_KEY");
+            if (directEnv != null) {
+                resolved = directEnv.trim();
+                if (!resolved.isBlank()) {
+                    log.info("Encryption key loaded from system environment variable SECRETS_ENCRYPTION_KEY");
+                }
+            }
+        } else {
+            log.info("Encryption key loaded from Spring property (orchestrator.secrets.encryption-key / .env)");
+        }
+
+        if (resolved.isBlank()) {
+            // Level 3: ephemeral — WARN loudly
             byte[] ephemeral = new byte[32];
             new SecureRandom().nextBytes(ephemeral);
             this.secretKey = new SecretKeySpec(ephemeral, "AES");
-            log.warn("⚠️  SECRETS_ENCRYPTION_KEY not set — using ephemeral key. " +
-                    "Secrets will be lost on container restart. " +
-                    "Generate a persistent key with: openssl rand -base64 32");
+            log.warn("╔══════════════════════════════════════════════════════════════╗");
+            log.warn("║  ⚠️  SECRETS_ENCRYPTION_KEY not set — EPHEMERAL KEY IN USE   ║");
+            log.warn("║  Secrets stored now CANNOT be decrypted after restart.       ║");
+            log.warn("║  Fix: set SECRETS_ENCRYPTION_KEY in your .env file           ║");
+            log.warn("║  Generate: openssl rand -base64 32  (Mac/Linux)              ║");
+            log.warn("║            [Convert]::ToBase64String(...)  (PowerShell)      ║");
+            log.warn("╚══════════════════════════════════════════════════════════════╝");
         } else {
-            byte[] keyBytes = Base64.getDecoder().decode(base64Key);
+            byte[] keyBytes;
+            try {
+                keyBytes = Base64.getDecoder().decode(resolved);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(
+                        "SECRETS_ENCRYPTION_KEY is not valid base64. " +
+                                "Check for extra whitespace or line endings in your .env file. " +
+                                "Generate a fresh key with: openssl rand -base64 32",
+                        e);
+            }
             if (keyBytes.length != 32) {
                 throw new IllegalArgumentException(
-                        "SECRETS_ENCRYPTION_KEY must be 32 bytes base64-encoded (got " +
-                                keyBytes.length + " bytes). Generate with: openssl rand -base64 32");
+                        "SECRETS_ENCRYPTION_KEY must decode to exactly 32 bytes (256-bit AES). " +
+                                "Got " + keyBytes.length + " bytes. Generate with: openssl rand -base64 32");
             }
             this.secretKey = new SecretKeySpec(keyBytes, "AES");
-            log.info("Encryption service initialised with configured 256-bit key");
+            log.info("✅ Encryption service ready — 256-bit AES-GCM key configured.");
         }
     }
 

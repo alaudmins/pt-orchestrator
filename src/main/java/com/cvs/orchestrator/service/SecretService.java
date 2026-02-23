@@ -40,11 +40,23 @@ public class SecretService {
     /** Resolve a secret name to its decrypted raw value. Used by EnvVarResolver. */
     @Transactional(readOnly = true)
     public String getSecretValue(String name) {
-        return secretRepository.findByName(name)
-                .map(e -> encryptionService.decrypt(e.getEncryptedValue()))
+        SecretEntity entity = secretRepository.findByName(name)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Secret '" + name + "' not found. " +
                                 "Register it with: POST /api/secrets {\"name\":\"" + name + "\",\"value\":\"...\"}"));
+        try {
+            return encryptionService.decrypt(entity.getEncryptedValue());
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Failed to decrypt secret '" + name + "'. " +
+                            "This usually means SECRETS_ENCRYPTION_KEY changed between restarts " +
+                            "(e.g. no .env file on Windows → new ephemeral key each start). " +
+                            "Fix: (1) set a stable SECRETS_ENCRYPTION_KEY in your .env file, " +
+                            "(2) delete and re-store this secret via DELETE /api/secrets/" + name +
+                            " then POST /api/secrets. " +
+                            "Root cause: " + e.getMessage(),
+                    e);
+        }
     }
 
     /** List all secret names + descriptions (values never returned). */
