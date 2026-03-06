@@ -18,6 +18,11 @@ stages:
             NUM2: "7"
             VERBOSE: "true"
 
+      - id: wait-for-warmup
+        type: WAIT
+        config:
+          durationSeconds: 10
+
       - id: verify-success
         type: JENKINS_JOB
         config:

@@ -16,6 +16,11 @@ stages:
   - id: test-stage
     executionMode: SEQUENTIAL
     steps:
+      - id: wait-before-test
+        type: WAIT
+        config:
+          waitTimeSeconds: 15
+
       - id: perf-test
         type: JENKINS_JOB
         config:
