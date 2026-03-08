@@ -44,9 +44,12 @@ function DesignerFlow() {
     });
 
     const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+    const [profiles, setProfiles] = useState<any[]>([]);
 
     // Initial load
     useEffect(() => {
+        axios.get('/api/profiles?type=JENKINS').then(res => setProfiles(res.data)).catch(console.error);
+
         if (!isNew) {
             axios.get('/api/workflows').then(res => {
                 const wf = res.data.find((w: any) => w.workflowId === workflowId);
@@ -364,13 +367,131 @@ function DesignerFlow() {
                             {activeStepData.type === 'JENKINS_JOB' && (
                                 <>
                                     <div>
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Jenkins URL</label>
-                                        <input type="text" value={(activeStepData.config as any)?.jenkinsUrl || ''} onChange={e => updateSelectedStepConfig('config.jenkinsUrl', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="${JENKINS_URL}" />
+                                        <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-2">
+                                            Integration Profile
+                                            {!profiles.length && <span className="text-[10px] text-orange-500 normal-case bg-orange-50 px-2 py-0.5 rounded cursor-pointer" onClick={() => router.push('/configs')}>No profiles found. Click to add one.</span>}
+                                        </label>
+                                        <select
+                                            value={(activeStepData.config as any)?.profileId || ''}
+                                            onChange={e => {
+                                                updateSelectedStepConfig('config.profileId', e.target.value);
+                                                updateSelectedStepConfig('config.jenkinsUrl', undefined);
+                                                updateSelectedStepConfig('config.username', undefined);
+                                                updateSelectedStepConfig('config.token', undefined);
+                                            }}
+                                            className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                                        >
+                                            <option value="" disabled>Select a Jenkins Profile...</option>
+                                            {profiles.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name} ({p.url})</option>
+                                            ))}
+                                        </select>
                                     </div>
-                                    <div>
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Job Name</label>
-                                        <input type="text" value={(activeStepData.config as any)?.jobName || ''} onChange={e => updateSelectedStepConfig('config.jobName', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                                    <div className="mt-4">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase flex justify-between">
+                                            <span>Job Name (or Folder/Job Path)</span>
+                                            {((activeStepData.config as any)?.profileId && (activeStepData.config as any)?.jobName) && (
+                                                <button
+                                                    onClick={async () => {
+                                                        const pId = (activeStepData.config as any).profileId;
+                                                        const jName = (activeStepData.config as any).jobName;
+                                                        try {
+                                                            const res = await axios.get(`/api/jenkins/parameters?profileId=${pId}&jobName=${jName}`);
+                                                            if (res.data && res.data.length > 0) {
+                                                                const initialParams: any = { ...((activeStepData.config as any).parameters || {}) };
+                                                                // Pre-fill defaults only if not already set by user
+                                                                res.data.forEach((p: any) => {
+                                                                    if (initialParams[p.name] === undefined && p.defaultValue !== null) {
+                                                                        initialParams[p.name] = p.defaultValue;
+                                                                    }
+                                                                });
+                                                                updateSelectedStepConfig('config.parameters', initialParams);
+                                                                // Store definitions in transient state to render the UI, but we don't save definitions to YAML
+                                                                (window as any)[`__jenkins_params_${activeStepData.id}`] = res.data;
+                                                                // Force re-render just to see the transient state picked up below
+                                                                updateSelectedStepConfig('_triggerRender', Date.now());
+                                                            } else {
+                                                                alert("No parameters found for this job.");
+                                                            }
+                                                        } catch (e: any) {
+                                                            alert(e.response?.data?.error || "Failed to fetch parameters");
+                                                        }
+                                                    }}
+                                                    className="text-[10px] text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                                                >
+                                                    Sync Parameters
+                                                </button>
+                                            )}
+                                        </label>
+                                        <input type="text" value={(activeStepData.config as any)?.jobName || ''} onChange={e => updateSelectedStepConfig('config.jobName', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="e.g. backend/deploy-job" />
                                     </div>
+
+                                    {/* DYNAMIC PARAMETERS SECTION */}
+                                    {((activeStepData.config as any).parameters || (window as any)[`__jenkins_params_${activeStepData.id}`]) && (
+                                        <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                                            <div className="text-xs font-semibold text-slate-700 uppercase flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
+                                                Build Parameters
+                                            </div>
+
+                                            {/* Render known active parameters, or introspected parameters */}
+                                            {(() => {
+                                                const introspected = (window as any)[`__jenkins_params_${activeStepData.id}`] as any[] || [];
+                                                const currentParams = (activeStepData.config as any).parameters || {};
+
+                                                // Create a unified list of keys to render
+                                                const allKeys = Array.from(new Set([...introspected.map(p => p.name), ...Object.keys(currentParams)]));
+
+                                                if (allKeys.length === 0) return <div className="text-xs text-slate-400 text-center py-2">No parameters defined.</div>;
+
+                                                return allKeys.map(key => {
+                                                    const def = introspected.find(p => p.name === key);
+                                                    return (
+                                                        <div key={key}>
+                                                            <label className="text-xs font-medium text-slate-600 flex justify-between">
+                                                                <span>{key} {def?.type ? <span className="text-[9px] text-slate-400">({def.type})</span> : ''}</span>
+                                                                <button onClick={() => {
+                                                                    const newParams = { ...currentParams };
+                                                                    delete newParams[key];
+                                                                    updateSelectedStepConfig('config.parameters', newParams);
+                                                                }} className="text-red-400 hover:text-red-600"><X size={12} /></button>
+                                                            </label>
+                                                            {def?.description && <p className="text-[10px] text-slate-400 mb-1 leading-tight">{def.description}</p>}
+                                                            <input
+                                                                type="text"
+                                                                value={currentParams[key] || ''}
+                                                                onChange={e => {
+                                                                    updateSelectedStepConfig('config.parameters', { ...currentParams, [key]: e.target.value });
+                                                                }}
+                                                                className="mt-1 w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                                                                placeholder={def?.defaultValue !== undefined ? `Default: ${def.defaultValue}` : 'Value'}
+                                                            />
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+
+                                            <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
+                                                <input id={`new-param-${activeStepData.id}`} type="text" placeholder="Custom Param" className="flex-1 bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500" onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        const el = e.target as HTMLInputElement;
+                                                        if (el.value) {
+                                                            const currentParams = (activeStepData.config as any).parameters || {};
+                                                            updateSelectedStepConfig('config.parameters', { ...currentParams, [el.value]: '' });
+                                                            el.value = '';
+                                                        }
+                                                    }
+                                                }} />
+                                                <button onClick={() => {
+                                                    const el = document.getElementById(`new-param-${activeStepData.id}`) as HTMLInputElement;
+                                                    if (el && el.value) {
+                                                        const currentParams = (activeStepData.config as any).parameters || {};
+                                                        updateSelectedStepConfig('config.parameters', { ...currentParams, [el.value]: '' });
+                                                        el.value = '';
+                                                    }
+                                                }} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-300 font-medium whitespace-nowrap"><Plus size={12} className="inline mr-1" />Add</button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </>
                             )}
 

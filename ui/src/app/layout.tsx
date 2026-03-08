@@ -37,6 +37,10 @@ export default function RootLayout({
               <LayoutDashboard size={20} />
               <span className="font-medium">Runs</span>
             </Link>
+            <Link href="/configs" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-600 hover:bg-white hover:text-blue-600 hover:shadow-sm transition-all">
+              <Settings size={20} />
+              <span className="font-medium">Integrations</span>
+            </Link>
           </nav>
         </aside>
 

@@ -18,9 +18,15 @@ public class JenkinsExecutor implements StepExecutor {
 
     private final WebClient webClient;
     private final EnvVarResolver envVarResolver;
+    private final com.cvs.orchestrator.service.ConfigProfileService profileService;
+    private final com.cvs.orchestrator.service.SecretService secretService;
 
-    public JenkinsExecutor(EnvVarResolver envVarResolver) {
+    public JenkinsExecutor(EnvVarResolver envVarResolver,
+            com.cvs.orchestrator.service.ConfigProfileService profileService,
+            com.cvs.orchestrator.service.SecretService secretService) {
         this.envVarResolver = envVarResolver;
+        this.profileService = profileService;
+        this.secretService = secretService;
         this.webClient = WebClient.builder().build();
     }
 
@@ -36,9 +42,29 @@ public class JenkinsExecutor implements StepExecutor {
         Map<String, Object> metadata = context.getMetadata() != null ? context.getMetadata() : new HashMap<>();
 
         String jenkinsUrl = (String) config.get("jenkinsUrl");
-        String jobName = (String) config.get("jobName");
         String username = (String) config.get("username");
         String token = (String) config.get("token");
+        String profileId = (String) config.get("profileId");
+
+        // Prefer Config Profile resolution if profileId is provided
+        if (profileId != null && !profileId.isBlank()) {
+            java.util.UUID pid = java.util.UUID.fromString(profileId);
+            com.cvs.orchestrator.model.ConfigProfileEntity profile = profileService.getProfile(pid)
+                    .orElseThrow(() -> new RuntimeException("ConfigProfile not found for id: " + profileId));
+
+            jenkinsUrl = profile.getUrl();
+            username = profile.getUsername();
+            if (profile.getSecretReference() != null && !profile.getSecretReference().isBlank()) {
+                token = secretService.getSecretValue(profile.getSecretReference());
+            }
+        }
+
+        String jobName = (String) config.get("jobName");
+
+        if (jenkinsUrl == null || jobName == null) {
+            return StepExecutionResult
+                    .failed("Missing required configuration: jenkinsUrl or jobName (or valid profileId)");
+        }
 
         // Check if already triggered
         if (metadata.containsKey("buildNumber")) {
