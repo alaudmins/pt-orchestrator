@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Orchestrates workflow execution.
@@ -54,6 +55,18 @@ public class WorkflowEngine {
     @Value("${orchestrator.poller.interval:10000}")
     private long pollerIntervalMs;
 
+    // Track runs that have been aborted by the user
+    private final Map<UUID, Boolean> abortSignals = new ConcurrentHashMap<>();
+
+    // -------------------------------------------------------------------------
+    // Execution Control API
+    // -------------------------------------------------------------------------
+
+    public void abortRun(UUID runId) {
+        log.info("Received abort signal for run {}", runId);
+        abortSignals.put(runId, true);
+    }
+
     // -------------------------------------------------------------------------
     // Entry point (no @Transactional — each repo.save() commits on its own)
     // -------------------------------------------------------------------------
@@ -66,16 +79,26 @@ public class WorkflowEngine {
         run.setStartTime(Instant.now());
         workflowRunRepository.save(run);
 
+        // Clear any old signals (just in case of uuid re-use, though unlikely)
+        abortSignals.remove(run.getId());
+
         try {
             for (StageDefinitionEntity stageDef : run.getWorkflowDefinition().getStages()) {
                 executeStage(run, stageDef);
             }
-            run.setStatus(Status.SUCCESS);
+            if (abortSignals.getOrDefault(run.getId(), false)) {
+                log.warn("Workflow run {} finished stages but was aborted", run.getId());
+                run.setStatus(Status.FAILED);
+            } else {
+                run.setStatus(Status.SUCCESS);
+            }
             run.setEndTime(Instant.now());
         } catch (Exception e) {
-            log.error("Workflow execution failed", e);
+            log.error("Workflow execution failed or was aborted", e);
             run.setStatus(Status.FAILED);
             run.setEndTime(Instant.now());
+        } finally {
+            abortSignals.remove(run.getId());
         }
 
         workflowRunRepository.save(run);
@@ -86,6 +109,10 @@ public class WorkflowEngine {
     // -------------------------------------------------------------------------
 
     private void executeStage(WorkflowRunEntity workflowRun, StageDefinitionEntity stageDef) {
+        if (abortSignals.getOrDefault(workflowRun.getId(), false)) {
+            throw new RuntimeException("Workflow run aborted before starting stage: " + stageDef.getStageId());
+        }
+
         log.info("Starting stage: {} [{}]", stageDef.getStageId(), stageDef.getExecutionMode());
 
         StageRunEntity stageRun = new StageRunEntity();
@@ -138,6 +165,12 @@ public class WorkflowEngine {
         List<String> failures = Collections.synchronizedList(new ArrayList<>());
 
         for (StepDefinitionEntity stepDef : stageDef.getSteps()) {
+            if (abortSignals.getOrDefault(stageRun.getWorkflowRun().getId(), false)) {
+                log.warn("Parallel execution aborted before starting step: {}", stepDef.getStepId());
+                failures.add(stepDef.getStepId() + ": Aborted");
+                continue;
+            }
+
             StepRunEntity stepRun = triggerStep(stageRun, stepDef);
 
             if (stepRun.getStatus() == Status.RUNNING) {
@@ -147,10 +180,11 @@ public class WorkflowEngine {
                 final Map<String, Object> meta = new HashMap<>(stepRun.getMetadata());
                 final String stepId = stepDef.getStepId();
                 final Map<String, Object> cfg = stepDef.getConfig();
+                final UUID workflowRunId = stageRun.getWorkflowRun().getId();
 
                 CompletableFuture<Void> f = CompletableFuture.runAsync(() -> {
                     try {
-                        pollParallelStep(stepRunId, stepId, executor, cfg, meta);
+                        pollParallelStep(stepRunId, stepId, executor, cfg, meta, workflowRunId);
                     } catch (Exception e) {
                         log.error("Parallel step {} failed: {}", stepId, e.getMessage());
                         failures.add(stepId + ": " + e.getMessage());
@@ -215,6 +249,14 @@ public class WorkflowEngine {
         StepExecutionContext ctx = buildContext(stepDef, new HashMap<>(stepRun.getMetadata()));
 
         while (true) {
+            if (abortSignals.getOrDefault(stepRun.getStageRun().getWorkflowRun().getId(), false)) {
+                stepRun.setStatus(Status.FAILED);
+                stepRun.setEndTime(Instant.now());
+                stepRun.setLogs("Aborted by user");
+                stepRunRepository.save(stepRun);
+                throw new RuntimeException("Step aborted: " + stepDef.getStepId());
+            }
+
             sleep(pollerIntervalMs);
             StepExecutionResult result = executor.execute(ctx);
             if (result.getMetadata() != null)
@@ -252,7 +294,7 @@ public class WorkflowEngine {
 
     private void pollParallelStep(UUID stepRunId, String stepId,
             StepExecutor executor, Map<String, Object> config,
-            Map<String, Object> initialMeta) {
+            Map<String, Object> initialMeta, UUID workflowRunId) {
         log.info("Parallel polling started for step {}", stepId);
         StepExecutionContext ctx = new StepExecutionContext();
         ctx.setStepId(stepId);
@@ -260,6 +302,10 @@ public class WorkflowEngine {
         ctx.setMetadata(new HashMap<>(initialMeta));
 
         while (true) {
+            if (abortSignals.getOrDefault(workflowRunId, false)) {
+                throw new RuntimeException("Parallel step aborted: " + stepId);
+            }
+
             sleep(pollerIntervalMs);
             StepExecutionResult result = executor.execute(ctx);
             if (result.getMetadata() != null)

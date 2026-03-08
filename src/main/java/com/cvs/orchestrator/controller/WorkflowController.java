@@ -114,6 +114,13 @@ public class WorkflowController {
         return ResponseEntity.ok(dto);
     }
 
+    @PostMapping("/runs/{runId}/abort")
+    public ResponseEntity<java.util.Map<String, String>> abortRun(@PathVariable UUID runId) {
+        workflowService.abortRun(runId);
+        return ResponseEntity.ok(java.util.Map.of(
+                "message", "Abort signal sent for run " + runId));
+    }
+
     @DeleteMapping("/workflows/{workflowId}")
     public ResponseEntity<Void> deleteWorkflow(@PathVariable String workflowId) {
         workflowService.deleteWorkflow(workflowId);

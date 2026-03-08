@@ -170,6 +170,25 @@ public class WorkflowService {
     }
 
     @Transactional
+    public void abortRun(UUID runId) {
+        log.info("Aborting run: {}", runId);
+        WorkflowRunEntity run = workflowRunRepository.findById(runId)
+                .orElseThrow(() -> new RuntimeException("Run not found: " + runId));
+
+        if (run.getStatus() == Status.RUNNING || run.getStatus() == Status.PENDING) {
+            workflowEngine.abortRun(runId);
+            run.setStatus(Status.FAILED);
+            // We don't save end time here, the engine will handle it when loops exit
+            // or we could force it here. Let's let the engine's finally block handle
+            // workflowRunRepository.save if possible,
+            // but we can also set the status here just in case.
+            workflowRunRepository.save(run);
+        } else {
+            throw new IllegalStateException("Run is not in a cancellable state: " + run.getStatus());
+        }
+    }
+
+    @Transactional
     public void deleteWorkflow(String workflowId) {
         WorkflowDefinitionEntity workflow = workflowDefinitionRepository.findAll().stream()
                 .filter(w -> w.getWorkflowId().equals(workflowId))
