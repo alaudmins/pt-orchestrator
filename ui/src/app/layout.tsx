@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} bg-background text-foreground min-h-screen flex`}>
         {/* Sidebar */}
         <aside className="w-64 glass border-r border-border h-screen sticky top-0 flex flex-col items-center py-6 px-4 z-50">
