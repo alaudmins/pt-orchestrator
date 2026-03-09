@@ -18,9 +18,15 @@ public class GithubExecutor implements StepExecutor {
 
     private final WebClient webClient;
     private final EnvVarResolver envVarResolver;
+    private final com.cvs.orchestrator.service.ConfigProfileService profileService;
+    private final com.cvs.orchestrator.service.SecretService secretService;
 
-    public GithubExecutor(EnvVarResolver envVarResolver) {
+    public GithubExecutor(EnvVarResolver envVarResolver,
+            com.cvs.orchestrator.service.ConfigProfileService profileService,
+            com.cvs.orchestrator.service.SecretService secretService) {
         this.envVarResolver = envVarResolver;
+        this.profileService = profileService;
+        this.secretService = secretService;
         this.webClient = WebClient.builder()
                 .baseUrl("https://api.github.com")
                 .defaultHeader("Accept", "application/vnd.github.v3+json")
@@ -42,7 +48,19 @@ public class GithubExecutor implements StepExecutor {
         String workflow = (String) config.get("workflow");
         String branch = (String) config.get("branch");
         String token = (String) config.get("token");
+        String profileId = (String) config.get("profileId");
         Map<String, Object> inputs = (Map<String, Object>) config.get("inputs");
+
+        // Prefer Config Profile resolution if profileId is provided
+        if (profileId != null && !profileId.isBlank()) {
+            java.util.UUID pid = java.util.UUID.fromString(profileId);
+            com.cvs.orchestrator.model.ConfigProfileEntity profile = profileService.getProfile(pid)
+                    .orElseThrow(() -> new RuntimeException("ConfigProfile not found for id: " + profileId));
+
+            if (profile.getSecretReference() != null && !profile.getSecretReference().isBlank()) {
+                token = secretService.getSecretValue(profile.getSecretReference());
+            }
+        }
 
         // Check if already triggered and we have run ID
         if (metadata.containsKey("runId")) {

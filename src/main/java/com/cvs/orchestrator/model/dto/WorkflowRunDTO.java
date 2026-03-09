@@ -7,7 +7,7 @@ import java.util.UUID;
 @Data
 public class WorkflowRunDTO {
     private UUID runId;
-    private UUID workflowId;
+    private String workflowId;
     private String status;
     private Instant startTime;
     private Instant endTime;

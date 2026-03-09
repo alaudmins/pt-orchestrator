@@ -271,15 +271,19 @@ export default function ConfigsPage() {
                                     <option value="GITHUB">GitHub</option>
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Endpoint URL</label>
-                                <input required type="url" value={newProfile.url} onChange={e => setNewProfile({ ...newProfile, url: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="https://jenkins.company.com" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            {newProfile.profileType === 'JENKINS' && (
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Username <span className="text-slate-400 font-normal">(Optional)</span></label>
-                                    <input type="text" value={newProfile.username} onChange={e => setNewProfile({ ...newProfile, username: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="service_account" />
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Endpoint URL</label>
+                                    <input required type="url" value={newProfile.url} onChange={e => setNewProfile({ ...newProfile, url: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="https://jenkins.company.com" />
                                 </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-4">
+                                {newProfile.profileType === 'JENKINS' ? (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Username <span className="text-slate-400 font-normal">(Optional)</span></label>
+                                        <input type="text" value={newProfile.username} onChange={e => setNewProfile({ ...newProfile, username: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="service_account" />
+                                    </div>
+                                ) : <div />}
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Attach Secret <span className="text-slate-400 font-normal">(Optional)</span></label>
                                     <select value={newProfile.secretReference} onChange={e => setNewProfile({ ...newProfile, secretReference: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-emerald-500 focus:border-emerald-500 text-sm font-mono text-emerald-700 bg-emerald-50">

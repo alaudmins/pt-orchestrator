@@ -41,7 +41,7 @@ public class WorkflowController {
 
         WorkflowRunDTO dto = new WorkflowRunDTO();
         dto.setRunId(run.getId());
-        dto.setWorkflowId(run.getWorkflowDefinition().getId());
+        dto.setWorkflowId(run.getWorkflowDefinition().getWorkflowId());
         dto.setStatus(run.getStatus().name());
         dto.setStartTime(run.getStartTime());
         dto.setEndTime(run.getEndTime());
@@ -57,7 +57,7 @@ public class WorkflowController {
                 .map(run -> {
                     WorkflowRunDTO dto = new WorkflowRunDTO();
                     dto.setRunId(run.getId());
-                    dto.setWorkflowId(run.getWorkflowDefinition().getId());
+                    dto.setWorkflowId(run.getWorkflowDefinition().getWorkflowId());
                     dto.setStatus(run.getStatus().name());
                     dto.setStartTime(run.getStartTime());
                     dto.setEndTime(run.getEndTime());
@@ -74,7 +74,7 @@ public class WorkflowController {
 
         WorkflowRunDetailDTO dto = new WorkflowRunDetailDTO();
         dto.setRunId(run.getId());
-        dto.setWorkflowId(run.getWorkflowDefinition().getId());
+        dto.setWorkflowId(run.getWorkflowDefinition().getWorkflowId());
         dto.setWorkflowName(run.getWorkflowDefinition().getName());
         dto.setStatus(run.getStatus().name());
         dto.setStartTime(run.getStartTime());

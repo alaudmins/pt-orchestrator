@@ -46,9 +46,11 @@ function DesignerFlow() {
     const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
     const [profiles, setProfiles] = useState<any[]>([]);
 
+    const [notFound, setNotFound] = useState(false);
+
     // Initial load
     useEffect(() => {
-        axios.get('/api/profiles?type=JENKINS').then(res => setProfiles(res.data)).catch(console.error);
+        axios.get('/api/profiles').then(res => setProfiles(res.data)).catch(console.error);
 
         if (!isNew) {
             axios.get('/api/workflows').then(res => {
@@ -57,11 +59,40 @@ function DesignerFlow() {
                     const parsed = parseYaml(wf.yamlContent);
                     if (parsed) {
                         setWorkflow(parsed);
+                    } else {
+                        setNotFound(true);
                     }
+                } else {
+                    setNotFound(true);
                 }
-            }).catch(err => alert("Failed to load workflow: " + err.message));
+            }).catch(err => {
+                console.error("Failed to load workflow:", err);
+                setNotFound(true);
+            });
         }
     }, [workflowId, isNew]);
+
+    if (notFound) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] p-8 text-center animate-in fade-in zoom-in-95 duration-500">
+                <div className="bg-slate-50 border border-slate-200 p-6 rounded-full inline-block mb-6 shadow-sm">
+                    <AlertCircle className="w-16 h-16 text-slate-400" />
+                </div>
+                <h1 className="text-4xl font-extrabold text-slate-800 tracking-tight mb-3">Workflow Not Found</h1>
+                <p className="text-lg text-slate-500 max-w-md mx-auto mb-8 font-medium">
+                    The workflow <span className="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded">'{workflowId}'</span> you're trying to design doesn't exist or has been deleted.
+                </p>
+                <div className="flex gap-4">
+                    <button onClick={() => router.replace('/workflows')} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold shadow-md transition-all flex items-center gap-2">
+                        <ArrowLeft size={18} /> Back to Workflows
+                    </button>
+                    <button onClick={() => router.replace('/designer/new')} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-md transition-all flex items-center gap-2">
+                        <Plus size={18} /> Create New
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     // Derive layout automatically
     const { nodes, edges } = useMemo(() => buildLayout(workflow), [workflow]);
@@ -498,13 +529,155 @@ function DesignerFlow() {
                             {activeStepData.type === 'GITHUB_WORKFLOW' && (
                                 <>
                                     <div>
+                                        <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-2">
+                                            Integration Profile
+                                            {!profiles.filter(p => p.profileType === 'GITHUB').length && <span className="text-[10px] text-orange-500 normal-case bg-orange-50 px-2 py-0.5 rounded cursor-pointer" onClick={() => router.push('/configs')}>No GitHub profiles found. Click to add one.</span>}
+                                        </label>
+                                        <select
+                                            value={(activeStepData.config as any)?.profileId || ''}
+                                            onChange={e => {
+                                                updateSelectedStepConfig('config.profileId', e.target.value);
+                                                updateSelectedStepConfig('config.token', undefined);
+                                            }}
+                                            className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                                        >
+                                            <option value="" disabled>Select a GitHub Profile...</option>
+                                            {profiles.filter(p => p.profileType === 'GITHUB').map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="mt-4">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">Repository</label>
-                                        <input type="text" value={(activeStepData.config as any)?.repo || ''} onChange={e => updateSelectedStepConfig('config.repo', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                                        <input type="text" value={(activeStepData.config as any)?.repo || ''} onChange={e => updateSelectedStepConfig('config.repo', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="owner/repo" />
                                     </div>
-                                    <div>
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Workflow File</label>
-                                        <input type="text" value={(activeStepData.config as any)?.workflow || ''} onChange={e => updateSelectedStepConfig('config.workflow', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                                    <div className="mt-4">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase flex justify-between">
+                                            <span>Workflow File</span>
+                                            {((activeStepData.config as any)?.profileId && (activeStepData.config as any)?.repo && (activeStepData.config as any)?.workflow) && (
+                                                <button
+                                                    onClick={async () => {
+                                                        const pId = (activeStepData.config as any).profileId;
+                                                        const repo = (activeStepData.config as any).repo;
+                                                        const wf = (activeStepData.config as any).workflow;
+                                                        try {
+                                                            const res = await axios.get(`/api/github/parameters?profileId=${pId}&repo=${repo}&workflow=${wf}`);
+                                                            if (res.data && res.data.length > 0) {
+                                                                const initialInputs: any = { ...((activeStepData.config as any).inputs || {}) };
+                                                                res.data.forEach((p: any) => {
+                                                                    if (initialInputs[p.name] === undefined && p.defaultValue !== undefined && p.defaultValue !== null) {
+                                                                        initialInputs[p.name] = p.defaultValue;
+                                                                    }
+                                                                });
+                                                                updateSelectedStepConfig('config.inputs', initialInputs);
+                                                                (window as any)[`__github_inputs_${activeStepData.id}`] = res.data;
+                                                                updateSelectedStepConfig('_triggerRender', Date.now());
+                                                            } else {
+                                                                alert("No workflow_dispatch inputs found for this workflow.");
+                                                            }
+                                                        } catch (e: any) {
+                                                            alert(e.response?.data?.error || "Failed to fetch inputs");
+                                                        }
+                                                    }}
+                                                    className="text-[10px] text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                                                >
+                                                    Sync Inputs
+                                                </button>
+                                            )}
+                                        </label>
+                                        <input type="text" value={(activeStepData.config as any)?.workflow || ''} onChange={e => updateSelectedStepConfig('config.workflow', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="e.g. build.yaml" />
                                     </div>
+                                    <div className="mt-4">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Branch (Optional)</label>
+                                        <input type="text" value={(activeStepData.config as any)?.branch || ''} onChange={e => updateSelectedStepConfig('config.branch', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="main" />
+                                    </div>
+
+                                    {/* DYNAMIC GITHUB INPUTS SECTION */}
+                                    {((activeStepData.config as any).inputs || (window as any)[`__github_inputs_${activeStepData.id}`]) && (
+                                        <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                                            <div className="text-xs font-semibold text-slate-700 uppercase flex items-center justify-between border-b border-slate-200 pb-2 mb-2">
+                                                Workflow Inputs
+                                            </div>
+
+                                            {(() => {
+                                                const introspected = (window as any)[`__github_inputs_${activeStepData.id}`] as any[] || [];
+                                                const currentInputs = (activeStepData.config as any).inputs || {};
+
+                                                const allKeys = Array.from(new Set([...introspected.map(p => p.name), ...Object.keys(currentInputs)]));
+
+                                                if (allKeys.length === 0) return <div className="text-xs text-slate-400 text-center py-2">No inputs defined.</div>;
+
+                                                return allKeys.map(key => {
+                                                    const def = introspected.find(p => p.name === key);
+                                                    return (
+                                                        <div key={key}>
+                                                            <label className="text-xs font-medium text-slate-600 flex justify-between">
+                                                                <span>{key} {def?.required ? <span className="text-red-500">*</span> : ''} {def?.type ? <span className="text-[9px] text-slate-400">({def.type})</span> : ''}</span>
+                                                                <button onClick={() => {
+                                                                    const newInputs = { ...currentInputs };
+                                                                    delete newInputs[key];
+                                                                    updateSelectedStepConfig('config.inputs', newInputs);
+                                                                }} className="text-red-400 hover:text-red-600"><X size={12} /></button>
+                                                            </label>
+                                                            {def?.description && <p className="text-[10px] text-slate-400 mb-1 leading-tight">{def.description}</p>}
+
+                                                            {/* Render select or text based on field options */}
+                                                            {def?.type === 'choice' && def?.options ? (
+                                                                <select
+                                                                    value={currentInputs[key] || def?.defaultValue || ''}
+                                                                    onChange={e => updateSelectedStepConfig('config.inputs', { ...currentInputs, [key]: e.target.value })}
+                                                                    className="mt-1 w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                                                                >
+                                                                    <option value="" disabled>Select an option</option>
+                                                                    {def.options.map((opt: string) => (
+                                                                        <option key={opt} value={opt}>{opt}</option>
+                                                                    ))}
+                                                                </select>
+                                                            ) : def?.type === 'boolean' ? (
+                                                                <select
+                                                                    value={currentInputs[key]?.toString() || def?.defaultValue?.toString() || 'false'}
+                                                                    onChange={e => updateSelectedStepConfig('config.inputs', { ...currentInputs, [key]: e.target.value === 'true' })}
+                                                                    className="mt-1 w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                                                                >
+                                                                    <option value="true">True</option>
+                                                                    <option value="false">False</option>
+                                                                </select>
+                                                            ) : (
+                                                                <input
+                                                                    type="text"
+                                                                    value={currentInputs[key] || ''}
+                                                                    onChange={e => updateSelectedStepConfig('config.inputs', { ...currentInputs, [key]: e.target.value })}
+                                                                    className="mt-1 w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                                                                    placeholder={def?.defaultValue !== undefined ? `Default: ${def.defaultValue}` : 'Value'}
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+
+                                            <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
+                                                <input id={`new-input-${activeStepData.id}`} type="text" placeholder="Custom Input" className="flex-1 bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500" onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        const el = e.target as HTMLInputElement;
+                                                        if (el.value) {
+                                                            const currentInputs = (activeStepData.config as any).inputs || {};
+                                                            updateSelectedStepConfig('config.inputs', { ...currentInputs, [el.value]: '' });
+                                                            el.value = '';
+                                                        }
+                                                    }
+                                                }} />
+                                                <button onClick={() => {
+                                                    const el = document.getElementById(`new-input-${activeStepData.id}`) as HTMLInputElement;
+                                                    if (el && el.value) {
+                                                        const currentInputs = (activeStepData.config as any).inputs || {};
+                                                        updateSelectedStepConfig('config.inputs', { ...currentInputs, [el.value]: '' });
+                                                        el.value = '';
+                                                    }
+                                                }} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-300 font-medium whitespace-nowrap"><Plus size={12} className="inline mr-1" />Add</button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </>
                             )}
 
