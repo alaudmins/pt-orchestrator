@@ -23,8 +23,10 @@ export default function ConfigsPage() {
     const [secrets, setSecrets] = useState<SecretSummary[]>([]);
     const [profiles, setProfiles] = useState<ConfigProfile[]>([]);
 
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loadingSecrets, setLoadingSecrets] = useState(true);
+    const [loadingProfiles, setLoadingProfiles] = useState(true);
+    const [secretsError, setSecretsError] = useState<string | null>(null);
+    const [profilesError, setProfilesError] = useState<string | null>(null);
 
     // Modals state
     const [showSecretModal, setShowSecretModal] = useState(false);
@@ -34,26 +36,37 @@ export default function ConfigsPage() {
     const [newSecret, setNewSecret] = useState({ name: "", value: "", description: "" });
     const [newProfile, setNewProfile] = useState({ name: "", profileType: "JENKINS", url: "", username: "", secretReference: "" });
 
-    const fetchData = async () => {
+    const fetchSecrets = async () => {
         try {
-            setLoading(true);
-            const [secRes, profRes] = await Promise.all([
-                axios.get("/api/secrets"),
-                axios.get("/api/profiles")
-            ]);
-            setSecrets(secRes.data);
-            setProfiles(profRes.data);
-            setError(null);
+            setLoadingSecrets(true);
+            const res = await axios.get("/api/secrets");
+            setSecrets(res.data);
+            setSecretsError(null);
         } catch (err: any) {
             console.error(err);
-            setError("Failed to load integrations. Check backend connection.");
+            setSecretsError("Failed to load secrets.");
         } finally {
-            setLoading(false);
+            setLoadingSecrets(false);
+        }
+    };
+
+    const fetchProfiles = async () => {
+        try {
+            setLoadingProfiles(true);
+            const res = await axios.get("/api/profiles");
+            setProfiles(res.data);
+            setProfilesError(null);
+        } catch (err: any) {
+            console.error(err);
+            setProfilesError("Failed to load profiles.");
+        } finally {
+            setLoadingProfiles(false);
         }
     };
 
     useEffect(() => {
-        fetchData();
+        fetchSecrets();
+        fetchProfiles();
     }, []);
 
     const saveSecret = async (e: React.FormEvent) => {
@@ -62,7 +75,7 @@ export default function ConfigsPage() {
             await axios.post("/api/secrets", newSecret);
             setShowSecretModal(false);
             setNewSecret({ name: "", value: "", description: "" });
-            fetchData();
+            fetchSecrets();
         } catch (err: any) {
             alert("Failed to save secret.");
         }
@@ -72,7 +85,7 @@ export default function ConfigsPage() {
         if (!confirm(`Delete secret '${name}'?`)) return;
         try {
             await axios.delete(`/api/secrets/${name}`);
-            fetchData();
+            fetchSecrets();
         } catch (err) {
             alert("Failed to delete secret.");
         }
@@ -84,7 +97,7 @@ export default function ConfigsPage() {
             await axios.post("/api/profiles", newProfile);
             setShowProfileModal(false);
             setNewProfile({ name: "", profileType: "JENKINS", url: "", username: "", secretReference: "" });
-            fetchData();
+            fetchProfiles();
         } catch (err: any) {
             alert("Failed to save profile.");
         }
@@ -94,13 +107,13 @@ export default function ConfigsPage() {
         if (!confirm(`Delete profile '${name}'?`)) return;
         try {
             await axios.delete(`/api/profiles/${id}`);
-            fetchData();
+            fetchProfiles();
         } catch (err) {
             alert("Failed to delete profile.");
         }
     };
 
-    if (loading && secrets.length === 0) return <div className="p-8"><div className="animate-pulse h-8 w-64 bg-slate-200 rounded"></div></div>;
+    if (loadingSecrets && secrets.length === 0 && loadingProfiles && profiles.length === 0) return <div className="p-8"><div className="animate-pulse h-8 w-64 bg-slate-200 rounded"></div></div>;
 
     return (
         <div className="max-w-6xl mx-auto p-8 pt-10 space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -109,10 +122,13 @@ export default function ConfigsPage() {
                 <p className="text-slate-500 mt-2 text-lg">Manage connected environments and execution secrets.</p>
             </header>
 
-            {error && (
+            {(secretsError || profilesError) && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md flex items-center gap-3">
-                    <AlertCircle className="text-red-500 h-5 w-5" />
-                    <p className="text-sm text-red-700">{error}</p>
+                    <AlertCircle className="text-red-500 h-5 w-5 shrink-0" />
+                    <div className="text-sm text-red-700">
+                        {secretsError && <div className="font-semibold">{secretsError}</div>}
+                        {profilesError && <div className="font-semibold">{profilesError}</div>}
+                    </div>
                 </div>
             )}
 
