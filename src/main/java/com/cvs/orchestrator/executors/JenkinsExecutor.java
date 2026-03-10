@@ -1,6 +1,5 @@
 package com.cvs.orchestrator.executors;
 
-import com.cvs.orchestrator.model.runtime.Status;
 import com.cvs.orchestrator.util.EnvVarResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -69,7 +68,7 @@ public class JenkinsExecutor implements StepExecutor {
         // Check if already triggered
         if (metadata.containsKey("buildNumber")) {
             // Poll for status
-            return checkBuildStatus(jenkinsUrl, jobName, username, token, metadata);
+            return checkBuildStatus(jenkinsUrl, jobName, username, token, metadata, config);
         } else if (metadata.containsKey("queueUrl")) {
             // Check queue for build number
             return checkQueue(jenkinsUrl, jobName, username, token, metadata);
@@ -181,15 +180,16 @@ public class JenkinsExecutor implements StepExecutor {
     }
 
     private StepExecutionResult checkBuildStatus(String jenkinsUrl, String jobName, String username, String token,
-            Map<String, Object> metadata) {
+            Map<String, Object> metadata, Map<String, Object> config) {
         Integer buildNumber = (Integer) metadata.get("buildNumber");
         log.info("Checking Jenkins build status: {}/{}", jobName, buildNumber);
 
         try {
             WebClient webClient = createWebClient(jenkinsUrl, username, token);
+            String jobPath = toJobPath(jobName);
 
             Map<String, Object> build = webClient.get()
-                    .uri(toJobPath(jobName) + "/" + buildNumber + "/api/json")
+                    .uri(jobPath + "/" + buildNumber + "/api/json?depth=1")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block(Duration.ofSeconds(10));
@@ -197,6 +197,68 @@ public class JenkinsExecutor implements StepExecutor {
             Boolean building = (Boolean) build.get("building");
 
             if (building != null && building) {
+                // Auto-Approve check
+                Boolean autoApprove = (Boolean) config.get("autoApprove");
+                if (Boolean.TRUE.equals(autoApprove)) {
+                    try {
+                        log.info("Polling for pending inputs on build {} using /wfapi/pendingInputActions",
+                                buildNumber);
+                        // Check for pending inputs
+                        java.util.List<Map<String, Object>> pendingInputs = webClient.get()
+                                .uri(jobPath + "/" + buildNumber + "/wfapi/pendingInputActions")
+                                .retrieve()
+                                .bodyToFlux(
+                                        new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
+                                        })
+                                .collectList()
+                                .block(Duration.ofSeconds(5));
+
+                        log.info("Received pending inputs payload for build {}: {}", buildNumber, pendingInputs);
+
+                        // Proceed with each pending input if any exist
+                        if (pendingInputs != null && !pendingInputs.isEmpty()) {
+                            for (Map<String, Object> input : pendingInputs) {
+                                String inputId = (String) input.get("id");
+
+                                log.info("Found pending input '{}' on build {}. Attempting auto-approval.", inputId,
+                                        buildNumber);
+
+                                // If proceedUrl is provided by the API, we use it (needs to strip context path
+                                // if necessary, but standard Spring WebClient might need absolute or relative
+                                // depending on setup)
+                                // Let's construct it safely using the same jobPath prefix
+                                String targetUri = jobPath + "/" + buildNumber + "/input/" + inputId + "/proceed";
+
+                                org.springframework.util.MultiValueMap<String, String> formData = new org.springframework.util.LinkedMultiValueMap<>();
+                                formData.add("json", "{}");
+
+                                webClient.post()
+                                        .uri(targetUri)
+                                        .contentType(org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED)
+                                        .body(org.springframework.web.reactive.function.BodyInserters
+                                                .fromFormData(formData))
+                                        .retrieve()
+                                        .toBodilessEntity()
+                                        .block(Duration.ofSeconds(5));
+                                log.info("Successfully auto-approved input '{}'.", inputId);
+                            }
+                        } else {
+                            log.info("No pending inputs found for build {}", buildNumber);
+                        }
+                    } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+                        log.info("API Response code {} when checking pending inputs for build {}",
+                                e.getStatusCode().value(), buildNumber);
+                        // 404 is normal when there are no pending inputs, don't log it
+                        if (e.getStatusCode().value() != 404) {
+                            log.warn("Failed to check/approve pending inputs for build {}: {}", buildNumber,
+                                    e.getMessage());
+                        }
+                    } catch (Exception ex) {
+                        log.warn("Failed to check/approve pending inputs for build {}: {}", buildNumber,
+                                ex.getMessage());
+                    }
+                }
+
                 log.debug("Jenkins build {} is still running", buildNumber);
                 return StepExecutionResult.running(metadata);
             }

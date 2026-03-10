@@ -456,6 +456,18 @@ function DesignerFlow() {
                                         </label>
                                         <input type="text" value={(activeStepData.config as any)?.jobName || ''} onChange={e => updateSelectedStepConfig('config.jobName', e.target.value)} className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="e.g. backend/deploy-job" />
                                     </div>
+                                    <div className="mt-4 flex items-center gap-2 bg-slate-50 p-3 border border-slate-200 rounded-lg">
+                                        <input
+                                            type="checkbox"
+                                            id={`auto-approve-${activeStepData.id}`}
+                                            checked={!!(activeStepData.config as any)?.autoApprove}
+                                            onChange={e => updateSelectedStepConfig('config.autoApprove', e.target.checked)}
+                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                        />
+                                        <label htmlFor={`auto-approve-${activeStepData.id}`} className="text-xs font-semibold text-slate-700 cursor-pointer">
+                                            Auto-Approve Pending Inputs (APPROVAL_REQUIRED)
+                                        </label>
+                                    </div>
 
                                     {/* DYNAMIC PARAMETERS SECTION */}
                                     {((activeStepData.config as any).parameters || (window as any)[`__jenkins_params_${activeStepData.id}`]) && (
