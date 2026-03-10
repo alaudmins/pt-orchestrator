@@ -400,7 +400,7 @@ function DesignerFlow() {
                                     <div>
                                         <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-2">
                                             Integration Profile
-                                            {!profiles.length && <span className="text-[10px] text-orange-500 normal-case bg-orange-50 px-2 py-0.5 rounded cursor-pointer" onClick={() => router.push('/configs')}>No profiles found. Click to add one.</span>}
+                                            {!profiles.filter(p => p.profileType === 'JENKINS').length && <span className="text-[10px] text-orange-500 normal-case bg-orange-50 px-2 py-0.5 rounded cursor-pointer" onClick={() => router.push('/configs')}>No Jenkins profiles found. Click to add one.</span>}
                                         </label>
                                         <select
                                             value={(activeStepData.config as any)?.profileId || ''}
@@ -413,7 +413,7 @@ function DesignerFlow() {
                                             className="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                                         >
                                             <option value="" disabled>Select a Jenkins Profile...</option>
-                                            {profiles.map(p => (
+                                            {profiles.filter(p => p.profileType === 'JENKINS').map(p => (
                                                 <option key={p.id} value={p.id}>{p.name} ({p.url})</option>
                                             ))}
                                         </select>
