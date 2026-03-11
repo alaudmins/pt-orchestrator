@@ -86,26 +86,21 @@ public class JenkinsExecutor implements StepExecutor {
             WebClient webClient = createWebClient(jenkinsUrl, username, token);
             Map<String, Object> parameters = (Map<String, Object>) config.get("parameters");
 
-            // Convert slash-separated folder path to Jenkins URL path.
-            // e.g. "TeamA/Perf/load-test" → "/job/TeamA/job/Perf/job/load-test"
-            String jobPath = toJobPath(jobName);
-            String endpoint;
-            if (parameters != null && !parameters.isEmpty()) {
-                endpoint = jobPath + "/buildWithParameters";
-            } else {
-                endpoint = jobPath + "/build";
+            // Use JenkinsUriBuilder to properly construct context-aware absolute URIs
+            String absoluteJobUrl = com.cvs.orchestrator.util.JenkinsUriBuilder.buildAbsoluteJobUrl(jenkinsUrl,
+                    jobName);
+            String endpointUrl = absoluteJobUrl
+                    + (parameters != null && !parameters.isEmpty() ? "/buildWithParameters" : "/build");
+
+            org.springframework.web.util.UriComponentsBuilder urlBuilder = org.springframework.web.util.UriComponentsBuilder
+                    .fromHttpUrl(endpointUrl);
+            if (parameters != null) {
+                parameters.forEach((key, value) -> urlBuilder.queryParam(key, value != null ? value.toString() : ""));
             }
 
             // Trigger the build
             var response = webClient.post()
-                    .uri(uriBuilder -> {
-                        var builder = uriBuilder.path(endpoint);
-                        if (parameters != null) {
-                            parameters.forEach(
-                                    (key, value) -> builder.queryParam(key, value != null ? value.toString() : ""));
-                        }
-                        return builder.build();
-                    })
+                    .uri(urlBuilder.build().toUri())
                     .retrieve()
                     .toBodilessEntity()
                     .block(Duration.ofSeconds(10));
@@ -141,11 +136,11 @@ public class JenkinsExecutor implements StepExecutor {
         try {
             WebClient webClient = createWebClient(jenkinsUrl, username, token);
 
-            // Extract queue item ID from URL
-            String queueItemPath = queueUrl.replace(jenkinsUrl, "");
+            // queueUrl is returned by Jenkins as an absolute URL, so use it directly safely
+            String queueApiUrl = queueUrl.endsWith("/") ? queueUrl + "api/json" : queueUrl + "/api/json";
 
             Map<String, Object> queueItem = webClient.get()
-                    .uri(queueItemPath + "/api/json")
+                    .uri(queueApiUrl)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block(Duration.ofSeconds(10));
@@ -186,10 +181,11 @@ public class JenkinsExecutor implements StepExecutor {
 
         try {
             WebClient webClient = createWebClient(jenkinsUrl, username, token);
-            String jobPath = toJobPath(jobName);
+            String absoluteJobUrl = com.cvs.orchestrator.util.JenkinsUriBuilder.buildAbsoluteJobUrl(jenkinsUrl,
+                    jobName);
 
             Map<String, Object> build = webClient.get()
-                    .uri(jobPath + "/" + buildNumber + "/api/json?depth=1")
+                    .uri(absoluteJobUrl + "/" + buildNumber + "/api/json?depth=1")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block(Duration.ofSeconds(10));
@@ -205,7 +201,7 @@ public class JenkinsExecutor implements StepExecutor {
                                 buildNumber);
                         // Check for pending inputs
                         java.util.List<Map<String, Object>> pendingInputs = webClient.get()
-                                .uri(jobPath + "/" + buildNumber + "/wfapi/pendingInputActions")
+                                .uri(absoluteJobUrl + "/" + buildNumber + "/wfapi/pendingInputActions")
                                 .retrieve()
                                 .bodyToFlux(
                                         new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
@@ -223,11 +219,9 @@ public class JenkinsExecutor implements StepExecutor {
                                 log.info("Found pending input '{}' on build {}. Attempting auto-approval.", inputId,
                                         buildNumber);
 
-                                // If proceedUrl is provided by the API, we use it (needs to strip context path
-                                // if necessary, but standard Spring WebClient might need absolute or relative
-                                // depending on setup)
-                                // Let's construct it safely using the same jobPath prefix
-                                String targetUri = jobPath + "/" + buildNumber + "/input/" + inputId + "/proceed";
+                                // Let's construct it safely using the absoluteJobUrl
+                                String targetUri = absoluteJobUrl + "/" + buildNumber + "/input/" + inputId
+                                        + "/proceed";
 
                                 org.springframework.util.MultiValueMap<String, String> formData = new org.springframework.util.LinkedMultiValueMap<>();
                                 formData.add("json", "{}");
@@ -291,23 +285,4 @@ public class JenkinsExecutor implements StepExecutor {
                 .build();
     }
 
-    /**
-     * Converts a slash-separated Jenkins job path into the URL segment form.
-     *
-     * Examples:
-     * "my-job" → "/job/my-job"
-     * "TeamA/load-test" → "/job/TeamA/job/load-test"
-     * "TeamA/Perf/load-test" → "/job/TeamA/job/Perf/job/load-test"
-     *
-     * This supports Jenkins Folders Plugin (CloudBees / Jenkins LTS) where each
-     * folder and job segment is separated by /job/ in the REST API path.
-     */
-    private String toJobPath(String jobName) {
-        if (jobName == null || jobName.isBlank()) {
-            throw new IllegalArgumentException("Jenkins jobName must not be blank");
-        }
-        // Split on '/' and join with '/job/' separator, then prepend '/job/'
-        String[] parts = jobName.trim().split("/");
-        return "/job/" + String.join("/job/", parts);
-    }
 }

@@ -50,10 +50,12 @@ public class JenkinsIntrospectionController {
 
         try {
             WebClient webClient = createWebClient(jenkinsUrl, username, token);
-            String jobPath = toJobPath(jobName);
+            // Build absolute URL to preserve context path (e.g. /jenkins/)
+            String absoluteJobUrl = com.cvs.orchestrator.util.JenkinsUriBuilder.buildAbsoluteJobUrl(jenkinsUrl,
+                    jobName);
 
             // Fetch job info focusing on parameter definitions
-            String apiUrl = jobPath
+            String apiUrl = absoluteJobUrl
                     + "/api/json?tree=property[parameterDefinitions[name,type,description,defaultParameterValue[value]]]";
 
             log.info("Executing Jenkins Parameter Sync API Request to URL: {}{}", jenkinsUrl, apiUrl);
@@ -125,13 +127,5 @@ public class JenkinsIntrospectionController {
         }
 
         return builder.build();
-    }
-
-    private String toJobPath(String jobName) {
-        if (jobName == null || jobName.isBlank()) {
-            throw new IllegalArgumentException("Jenkins jobName must not be blank");
-        }
-        String[] parts = jobName.trim().split("/");
-        return "/job/" + String.join("/job/", parts);
     }
 }
