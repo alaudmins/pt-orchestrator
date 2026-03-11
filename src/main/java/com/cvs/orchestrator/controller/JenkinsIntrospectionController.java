@@ -56,6 +56,8 @@ public class JenkinsIntrospectionController {
             String apiUrl = jobPath
                     + "/api/json?tree=property[parameterDefinitions[name,type,description,defaultParameterValue[value]]]";
 
+            log.info("Executing Jenkins Parameter Sync API Request to URL: {}{}", jenkinsUrl, apiUrl);
+
             Map<String, Object> jobDetails = webClient.get()
                     .uri(apiUrl)
                     .retrieve()
